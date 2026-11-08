@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron'
-import { ClientTransaction, fetchXDocument } from 'x-client-transaction-id'
 import { Account } from '../../shared/types'
+import { generateTwitterTransactionId } from './twitter-transaction'
 
 const TWITTER_BEARER_TOKEN =
   'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA'
@@ -15,31 +15,11 @@ export interface TwitterPublishResult {
 }
 
 export class TwitterDriver {
-  private cachedTx: ClientTransaction | null = null
-  private cachedTxTime: number = 0
-
   /**
-   * Acquire or reuse a ClientTransaction instance to generate x-client-transaction-id
+   * Generate x-client-transaction-id for GraphQL requests
    */
   private async getTransactionId(method: string, path: string): Promise<string> {
-    const now = Date.now()
-    // Refresh document transaction every 10 minutes
-    if (!this.cachedTx || now - this.cachedTxTime > 10 * 60 * 1000) {
-      try {
-        const doc = await fetchXDocument()
-        this.cachedTx = await ClientTransaction.create(doc)
-        this.cachedTxTime = now
-      } catch (err) {
-        console.warn('[TwitterDriver] Failed to fetch X document for transaction:', err)
-        // Reset so next try re-fetches
-        this.cachedTx = null
-      }
-    }
-
-    if (this.cachedTx) {
-      return this.cachedTx.generateTransactionId(method, path)
-    }
-    return ''
+    return generateTwitterTransactionId(method, path)
   }
 
   /**

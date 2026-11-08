@@ -1,3 +1,5 @@
+overrides:
+  css-select: 5.1.0
 allowBuilds:
   bufferutil: true
   electron: true
