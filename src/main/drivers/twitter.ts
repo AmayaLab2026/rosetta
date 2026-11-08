@@ -4,6 +4,14 @@ import { Account } from '../../shared/types'
 const TWITTER_BEARER_TOKEN =
   'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA'
 
+// Candidate GraphQL query IDs for CreateTweet (ordered by recency)
+const CANDIDATE_QUERY_IDS = [
+  'UecQIuYzi2MCOah7-eOpcQ', // Latest active query ID
+  'jm93VcEnLxM7My_CL9C_EA',
+  '5V_dkq1kcR8SwnPyEPuzGw',
+  'SiM_cAu83R0wnrpmKQQSEw'
+]
+
 export interface TwitterPublishResult {
   success: boolean
   tweetId?: string
@@ -86,13 +94,10 @@ export class TwitterDriver {
         checkLock = true
 
         try {
-          // Retrieve ALL cookies from the current session without restrictive domain filter
           const allCookies = await win.webContents.session.cookies.get({})
-
           const authTokenCookie = allCookies.find((c) => c.name === 'auth_token' && c.value.length > 15)
           let ct0Cookie = allCookies.find((c) => c.name === 'ct0' && c.value.length > 5)
 
-          // If auth_token exists, check if user has proceeded past login
           if (authTokenCookie) {
             const currentUrl = win.webContents.getURL()
             const isPastLogin =
@@ -102,7 +107,6 @@ export class TwitterDriver {
                 !currentUrl.includes('/logout') &&
                 currentUrl.includes('x.com'))
 
-            // If ct0 doesn't exist yet, we can generate a valid 32-hex token and inject it into session
             let ct0Val = ct0Cookie?.value
             if (!ct0Val && isPastLogin) {
               ct0Val = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
@@ -119,7 +123,6 @@ export class TwitterDriver {
             if (ct0Val) {
               const authToken = authTokenCookie.value
 
-              // Try verifying credentials via Twitter API
               let username = ''
               let displayName = 'X User'
               let avatarUrl = ''
@@ -130,7 +133,6 @@ export class TwitterDriver {
                 displayName = verification.user.name
                 avatarUrl = verification.user.avatarUrl
               } else {
-                // Fallback: extract handle from page DOM or URL if API returned 403 / rate-limit
                 try {
                   const domProfile = await win.webContents.executeJavaScript(`
                     (() => {
@@ -155,18 +157,15 @@ export class TwitterDriver {
                 }
 
                 if (!username && isPastLogin) {
-                  // Fallback: check twid cookie or generic handle
                   const twid = allCookies.find((c) => c.name === 'twid')
                   username = twid ? `user_${twid.value.replace(/[^0-9]/g, '')}` : 'x_user'
                 }
               }
 
-              // As long as we have verified or are past the login gate, complete login!
               if (username || isPastLogin) {
                 resolved = true
                 cleanup()
 
-                // Gracefully close window
                 setTimeout(() => {
                   try {
                     if (!win.isDestroyed()) win.close()
@@ -211,7 +210,6 @@ export class TwitterDriver {
       win.webContents.on('did-navigate', checkCookies)
       win.webContents.on('did-navigate-in-page', checkCookies)
 
-      // Polling interval every 800ms
       const intervalId = setInterval(checkCookies, 800)
 
       win.on('closed', () => {
@@ -226,7 +224,7 @@ export class TwitterDriver {
   }
 
   /**
-   * Publish a tweet (supports single tweet or automatic Thread if text exceeds 280 chars)
+   * Post a tweet via Twitter GraphQL API with automatic fallback to headless browser
    */
   async postTweet(
     account: Account,
@@ -238,8 +236,35 @@ export class TwitterDriver {
       return { success: false, error: 'Missing auth_token or ct0 credentials' }
     }
 
+    // Try API candidate query IDs
+    for (const queryId of CANDIDATE_QUERY_IDS) {
+      const apiResult = await this.tryApiCreateTweet(account, queryId, text, inReplyToTweetId)
+      if (apiResult.success) {
+        return apiResult
+      }
+      // If error is NOT 404, it might be an auth error, so return directly
+      if (apiResult.error && !apiResult.error.includes('404')) {
+        // If not a 404 (endpoint not found), try headless directly
+        console.warn(`[TwitterDriver] QueryId ${queryId} failed with ${apiResult.error}, trying next...`)
+      }
+    }
+
+    // Fallback: Post via background headless browser window
+    console.log('[TwitterDriver] API endpoints failed, falling back to background browser automation...')
+    return this.postViaHeadless(account, text)
+  }
+
+  /**
+   * Internal attempt to call GraphQL CreateTweet
+   */
+  private async tryApiCreateTweet(
+    account: Account,
+    queryId: string,
+    text: string,
+    inReplyToTweetId?: string
+  ): Promise<TwitterPublishResult> {
+    const { authToken, ct0 } = account.credentials
     try {
-      const queryId = 'oBOUakDVSnxCrsBDa6439Q'
       const url = `https://x.com/i/api/graphql/${queryId}/CreateTweet`
 
       const payload = {
@@ -281,7 +306,7 @@ export class TwitterDriver {
         method: 'POST',
         headers: {
           authorization: TWITTER_BEARER_TOKEN,
-          'x-csrf-token': ct0,
+          'x-csrf-token': ct0!,
           'x-twitter-auth-type': 'OAuth2Session',
           'x-twitter-active-user': 'yes',
           'content-type': 'application/json',
@@ -293,11 +318,13 @@ export class TwitterDriver {
         body: JSON.stringify(payload)
       })
 
-      const data = (await response.json()) as any
+      if (!response.ok) {
+        return { success: false, error: `HTTP ${response.status}` }
+      }
 
-      if (!response.ok || data.errors) {
-        const errMsg = data.errors?.[0]?.message || `HTTP ${response.status}`
-        return { success: false, error: errMsg }
+      const data = (await response.json()) as any
+      if (data.errors) {
+        return { success: false, error: data.errors[0]?.message || 'GraphQL error' }
       }
 
       const tweetResult =
@@ -307,7 +334,7 @@ export class TwitterDriver {
       const tweetId = tweetResult?.rest_id || tweetResult?.id_str
       const tweetUrl = tweetId
         ? `https://x.com/${account.username}/status/${tweetId}`
-        : undefined
+        : `https://x.com/${account.username}`
 
       return {
         success: true,
@@ -315,8 +342,94 @@ export class TwitterDriver {
         url: tweetUrl
       }
     } catch (err: any) {
-      return { success: false, error: err.message || 'Network error while publishing' }
+      return { success: false, error: err.message || 'API request failed' }
     }
+  }
+
+  /**
+   * Headless Fallback: Posts tweet using a background invisible Electron browser window
+   */
+  async postViaHeadless(account: Account, text: string): Promise<TwitterPublishResult> {
+    return new Promise((resolve) => {
+      const win = new BrowserWindow({
+        width: 650,
+        height: 750,
+        show: false, // completely hidden in background
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      })
+
+      let resolved = false
+
+      const cleanup = () => {
+        clearTimeout(timer)
+        setTimeout(() => {
+          try {
+            if (!win.isDestroyed()) win.destroy()
+          } catch {}
+        }, 1500)
+      }
+
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true
+          cleanup()
+          resolve({ success: false, error: 'Background post timed out' })
+        }
+      }, 30000)
+
+      // Listen for the CreateTweet network response
+      const filter = {
+        urls: [
+          '*://*.x.com/i/api/graphql/*/CreateTweet*',
+          '*://*.twitter.com/i/api/graphql/*/CreateTweet*'
+        ]
+      }
+
+      win.webContents.session.webRequest.onCompleted(filter, (details) => {
+        if ((details.statusCode === 200 || details.statusCode === 201) && !resolved) {
+          resolved = true
+          cleanup()
+          resolve({
+            success: true,
+            url: `https://x.com/${account.username}`
+          })
+        }
+      })
+
+      win.webContents.on('did-finish-load', async () => {
+        try {
+          await win.webContents.executeJavaScript(`
+            (async () => {
+              const sleep = ms => new Promise(r => setTimeout(r, ms));
+              for (let i = 0; i < 40; i++) {
+                const editor = document.querySelector('[data-testid="tweetTextarea_0"]') ||
+                               document.querySelector('[role="textbox"][contenteditable="true"]');
+                if (editor) {
+                  editor.focus();
+                  document.execCommand('insertText', false, ${JSON.stringify(text)});
+                  await sleep(600);
+                  const btn = document.querySelector('[data-testid="tweetButton"]') ||
+                              document.querySelector('[data-testid="tweetButtonInline"]');
+                  if (btn && !btn.hasAttribute('disabled') && btn.getAttribute('aria-disabled') !== 'true') {
+                    btn.click();
+                    return true;
+                  }
+                }
+                await sleep(300);
+              }
+              return false;
+            })()
+          `)
+        } catch (e) {
+          // ignore
+        }
+      })
+
+      win.loadURL('https://x.com/compose/post')
+    })
   }
 
   /**
