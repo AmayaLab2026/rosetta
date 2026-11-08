@@ -1,17 +1,14 @@
 import React from 'react'
-import { Play, Square, Cpu, Globe } from 'lucide-react'
+import { Cpu } from 'lucide-react'
 import { useI18n } from '../i18n'
 
 interface HeaderProps {
   engineRunning: boolean
-  onToggleEngine: () => void
   activeRulesCount: number
   activeAccountsCount: number
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  engineRunning,
-  onToggleEngine,
   activeRulesCount,
   activeAccountsCount
 }) => {
@@ -75,30 +72,14 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        <button
-          onClick={onToggleEngine}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-mono font-medium transition-all duration-150 ${
-            engineRunning
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 shadow-sm'
-              : 'bg-surface text-gray-700 hover:bg-surface-hover border border-surface-border shadow-panel'
-          }`}
-        >
-          {engineRunning ? (
-            <>
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600" />
-              </span>
-              <span>{t.header.engineActive}</span>
-              <Square className="w-3 h-3 ml-1 fill-current opacity-70" />
-            </>
-          ) : (
-            <>
-              <Play className="w-3 h-3 fill-current text-gray-600" />
-              <span>{t.header.startEngine}</span>
-            </>
-          )}
-        </button>
+        {/* Engine Always-On Status Badge */}
+        <div className="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-sm">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600" />
+          </span>
+          <span>{language === 'zh' ? '引擎就绪·实时监听中' : 'Engine Active & Listening'}</span>
+        </div>
       </div>
     </header>
   )

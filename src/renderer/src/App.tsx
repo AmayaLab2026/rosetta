@@ -28,7 +28,7 @@ function RosettaMain() {
       setAccounts(accs || [])
       setRules(rls || [])
       setLogs(lgs || [])
-      setEngineRunning(status?.running || false)
+      setEngineRunning(status?.running ?? status?.engineRunning ?? true)
     } catch (e) {
       console.error('[App] Failed to load data:', e)
     }
@@ -43,7 +43,7 @@ function RosettaMain() {
         setLogs((prev) => [newLog, ...prev])
       })
       const unsubStatus = window.rosetta.onStatusChanged((status) => {
-        setEngineRunning(status.engineRunning)
+        setEngineRunning(status?.running ?? status?.engineRunning ?? true)
       })
 
       return () => {
@@ -54,21 +54,6 @@ function RosettaMain() {
     return undefined
   }, [])
 
-  const handleToggleEngine = async () => {
-    if (!window.rosetta) return
-    if (engineRunning) {
-      await window.rosetta.stopMirrorEngine()
-      setEngineRunning(false)
-    } else {
-      const started = await window.rosetta.startMirrorEngine()
-      if (!started) {
-        alert('Could not start engine: Ensure Telegram account is connected and active.')
-      } else {
-        setEngineRunning(true)
-      }
-    }
-  }
-
   const activeRulesCount = rules.filter((r) => r.enabled).length
   const activeAccountsCount = accounts.filter((a) => a.status === 'active').length
 
@@ -76,7 +61,6 @@ function RosettaMain() {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground select-none font-sans">
       <Header
         engineRunning={engineRunning}
-        onToggleEngine={handleToggleEngine}
         activeRulesCount={activeRulesCount}
         activeAccountsCount={activeAccountsCount}
       />

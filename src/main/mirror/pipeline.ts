@@ -1,23 +1,51 @@
 import { MirrorFilterConfig } from '../../shared/types'
 
+export interface AttributionSource {
+  username?: string
+  name?: string
+}
+
 export class ContentPipeline {
   /**
-   * Format attribution footer: RT:@channel 西元YYYY年M月D日 HH:mm or 来自:@channel 西元YYYY年M月D日 HH:mm
+   * Format attribution footer:
+   * 1. Public username: "RT: t.me/xxx 西元YYYY年M月D日 HH:mm"
+   * 2. No username (name only): "RT: <name> 西元YYYY年M月D日 HH:mm"
    */
   static formatAttribution(
-    channelIdentifier: string,
+    source: AttributionSource | string,
     style: 'RT' | 'from' | 'none' = 'RT',
     date: Date = new Date()
   ): string {
-    if (style === 'none' || !channelIdentifier) return ''
+    if (style === 'none' || !source) return ''
     const prefix = style === 'from' ? '来自' : 'RT'
-    const cleanChannel = channelIdentifier.startsWith('@') ? channelIdentifier : `@${channelIdentifier}`
+
+    let identifier = ''
+    if (typeof source === 'string') {
+      let clean = source.trim()
+      clean = clean.replace(/^https?:\/\/t\.me\//i, 't.me/')
+      if (clean.startsWith('@')) {
+        identifier = `t.me/${clean.substring(1)}`
+      } else {
+        identifier = clean
+      }
+    } else {
+      if (source.username) {
+        let clean = source.username.replace(/^https?:\/\/t\.me\//i, '').replace(/^@/, '').trim()
+        identifier = `t.me/${clean}`
+      } else if (source.name) {
+        // 没有公开发布用户名的，直接用用户名/频道名，不加 t.me/
+        identifier = source.name.trim()
+      }
+    }
+
+    if (!identifier) return ''
+
     const year = date.getFullYear()
     const month = date.getMonth() + 1
     const day = date.getDate()
     const hours = String(date.getHours()).padStart(2, '0')
     const mins = String(date.getMinutes()).padStart(2, '0')
-    return `${prefix}:${cleanChannel} 西元${year}年${month}月${day}日 ${hours}:${mins}`
+    return `${prefix}: ${identifier} 西元${year}年${month}月${day}日 ${hours}:${mins}`
   }
 
   /**
@@ -26,7 +54,7 @@ export class ContentPipeline {
   static process(
     rawText: string,
     config: MirrorFilterConfig,
-    sourceChannel?: string,
+    source?: AttributionSource | string,
     messageDate?: Date
   ): { text: string; shouldDrop: boolean } {
     let result = (rawText || '').trim()
@@ -79,10 +107,10 @@ export class ContentPipeline {
       result = `${result}\n\n${config.suffix.trim()}`
     }
 
-    // 8. Append attribution tag (RT:@xxx or 来自:@xxx 西元xxx)
-    if (sourceChannel && config.attributionStyle !== 'none') {
+    // 8. Append attribution tag (RT: t.me/xxx or RT: Name 西元xxx)
+    if (source && config.attributionStyle !== 'none') {
       const attribution = this.formatAttribution(
-        sourceChannel,
+        source,
         config.attributionStyle || 'RT',
         messageDate || new Date()
       )

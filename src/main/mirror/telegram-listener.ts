@@ -13,11 +13,13 @@ export class TelegramMirrorService {
   private client: TelegramClient | null = null
   private isRunning: boolean = false
   private authClient: TelegramClient | null = null
+  private twitterCheckInterval: NodeJS.Timeout | null = null
 
   public getStatus() {
     const rules = appStore.getRules().filter((r) => r.enabled)
     return {
       running: this.isRunning,
+      engineRunning: this.isRunning,
       activeRulesCount: rules.length
     }
   }
@@ -151,6 +153,9 @@ export class TelegramMirrorService {
         }
       }, new DeletedMessage({}))
 
+      // Start bidirectional deletion checker (X -> TG)
+      this.startBidirectionalDeletionChecker()
+
       this.notifyStatusChange()
       return true
     } catch (err) {
@@ -165,6 +170,7 @@ export class TelegramMirrorService {
    * Stop Telegram mirror listener
    */
   async stop(): Promise<boolean> {
+    this.stopBidirectionalDeletionChecker()
     if (this.client) {
       try {
         await this.client.disconnect()
@@ -191,8 +197,40 @@ export class TelegramMirrorService {
     const chatUsername = chat?.username ? `@${chat.username}` : ''
     const chatId = chat?.id?.toString() || ''
     const chatTitle = chat?.title || chatUsername || 'Channel'
-    const channelAttributionHandle = chatUsername || chatTitle
     const messageDate = message.date ? new Date(message.date * 1000) : new Date()
+
+    // Determine the attribution source (Forward origin, or current channel)
+    let attributionSource: { username?: string; name?: string } = {}
+
+    if (message.fwdFrom) {
+      if (message.fwdFrom.fromName) {
+        attributionSource = { name: message.fwdFrom.fromName }
+      } else if (message.fwdFrom.fromId && this.client) {
+        try {
+          const entity: any = await this.client.getEntity(message.fwdFrom.fromId)
+          if (entity?.username) {
+            attributionSource = { username: entity.username }
+          } else {
+            const displayName =
+              entity?.title ||
+              [entity?.firstName, entity?.lastName].filter(Boolean).join(' ') ||
+              ''
+            attributionSource = { name: displayName }
+          }
+        } catch (e) {
+          console.warn('[Mirror] Failed to fetch forward entity:', e)
+        }
+      }
+    }
+
+    // If not a forwarded message (or failed to get forward source), use current channel
+    if (!attributionSource.username && !attributionSource.name) {
+      if (chat?.username) {
+        attributionSource = { username: chat.username }
+      } else {
+        attributionSource = { name: chat?.title || chatTitle }
+      }
+    }
 
     // Download media if message has photo/document
     const mediaBuffers: Buffer[] = []
@@ -207,12 +245,23 @@ export class TelegramMirrorService {
       }
     }
 
-    // Find all matching enabled rules
+    // Find all matching enabled rules (match against username, channel title, or channel ID)
     const rules = appStore.getRules().filter((r) => {
       if (!r.enabled) return false
-      const source = r.sourceChannel.username?.toLowerCase().replace(/^@/, '')
-      const incoming = (chat?.username || '').toLowerCase().replace(/^@/, '')
-      return source === incoming || r.sourceChannel.id === chatId
+      const source = (r.sourceChannel.username || r.sourceChannel.title || '')
+        .toLowerCase()
+        .replace(/^@/, '')
+        .replace(/^https?:\/\/t\.me\//, '')
+        .trim()
+      const incomingUsername = (chat?.username || '').toLowerCase().replace(/^@/, '').trim()
+      const incomingTitle = (chat?.title || '').toLowerCase().trim()
+      const incomingId = (chat?.id?.toString() || '').replace(/^-100/, '')
+
+      return (
+        (incomingUsername && source === incomingUsername) ||
+        (incomingTitle && (source === incomingTitle || incomingTitle.includes(source))) ||
+        (r.sourceChannel.id && (r.sourceChannel.id === chatId || r.sourceChannel.id.replace(/^-100/, '') === incomingId))
+      )
     })
 
     if (rules.length === 0) return
@@ -237,11 +286,11 @@ export class TelegramMirrorService {
         continue
       }
 
-      // Process content through pipeline with attribution footer (RT:@xxx or 来自:@xxx 西元xxx)
+      // Process content through pipeline with attribution footer (RT: t.me/xxx or RT: Name 西元xxx)
       const { text: processedText, shouldDrop } = ContentPipeline.process(
         rawText,
         rule.filters,
-        channelAttributionHandle,
+        attributionSource,
         messageDate
       )
 
@@ -277,11 +326,13 @@ export class TelegramMirrorService {
           }
         }
 
-        const tweetContent = processedText || ContentPipeline.formatAttribution(
-          channelAttributionHandle,
-          rule.filters.attributionStyle || 'RT',
-          messageDate
-        )
+        const tweetContent =
+          processedText ||
+          ContentPipeline.formatAttribution(
+            attributionSource,
+            rule.filters.attributionStyle || 'RT',
+            messageDate
+          )
 
         const chunks = rule.filters.autoSplitThread
           ? ContentPipeline.splitIntoThreadChunks(tweetContent)
@@ -404,6 +455,98 @@ export class TelegramMirrorService {
           appStore.deleteMirroredPost(record.id)
         }
       }
+    }
+  }
+
+  private startBidirectionalDeletionChecker(): void {
+    if (this.twitterCheckInterval) clearInterval(this.twitterCheckInterval)
+    // Check every 15 seconds
+    this.twitterCheckInterval = setInterval(async () => {
+      if (!this.isRunning || !this.client) return
+      try {
+        await this.checkTwitterDeletions()
+      } catch (err) {
+        console.warn('[Mirror] Error during bidirectional deletion check:', err)
+      }
+    }, 15000)
+  }
+
+  private stopBidirectionalDeletionChecker(): void {
+    if (this.twitterCheckInterval) {
+      clearInterval(this.twitterCheckInterval)
+      this.twitterCheckInterval = null
+    }
+  }
+
+  /**
+   * Scan mirrored posts: if tweet was deleted on X, delete corresponding message in Telegram!
+   */
+  async checkTwitterDeletions(): Promise<void> {
+    const mirrored = (appStore as any).data?.mirroredPosts || []
+    if (mirrored.length === 0) return
+
+    // Check recent mirrored posts
+    const recent = mirrored.slice(-25)
+
+    for (const record of recent) {
+      const rule = appStore.getRule(record.ruleId)
+      if (rule && rule.filters.autoSyncDeletion === false) continue
+
+      const targetAccount = appStore.getAccount(record.targetAccountId)
+      if (!targetAccount || targetAccount.platform !== 'twitter') continue
+
+      const primaryTweetId = record.targetTweetIds?.[0]
+      if (!primaryTweetId) continue
+
+      const exists = await twitterDriver.checkTweetExists(targetAccount, primaryTweetId)
+      if (!exists) {
+        console.log(
+          `[Mirror] Detected tweet ${primaryTweetId} was deleted on X! Sync-deleting TG message #${record.telegramMessageId}...`
+        )
+
+        // Delete from Telegram channel
+        const tgDeleted = await this.deleteTelegramMessage(
+          record.telegramChannelId || record.telegramChannelUsername || '',
+          record.telegramMessageId
+        )
+
+        const logId = `log_bi_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+        this.emitLog({
+          id: logId,
+          timestamp: new Date().toISOString(),
+          ruleId: record.ruleId,
+          sourceChannel: record.telegramChannelUsername || record.telegramChannelId || 'Telegram Channel',
+          targetPlatform: 'telegram',
+          originalText: `[双向同步撤回] X / Twitter 上的推文已删除`,
+          processedText: tgDeleted
+            ? `[自动同步撤回] 已从 Telegram 频道撤回对应消息 #${record.telegramMessageId}`
+            : `[撤回完成] 检测到 X 推文已删除，已同步清理映射记录`,
+          mediaCount: 0,
+          status: 'deleted'
+        })
+
+        // Remove mapping from store
+        appStore.deleteMirroredPost(record.id)
+      }
+    }
+  }
+
+  /**
+   * Delete a message in a Telegram channel (for bidirectional deletion)
+   */
+  async deleteTelegramMessage(channelIdentifier: string, messageId: number): Promise<boolean> {
+    if (!this.client || !this.isRunning) return false
+    try {
+      let entity: any = channelIdentifier
+      if (/^-?\d+$/.test(channelIdentifier)) {
+        entity = await this.client.getEntity(channelIdentifier)
+      }
+      await this.client.deleteMessages(entity, [messageId], { revoke: true })
+      console.log(`[Mirror] Successfully deleted Telegram message #${messageId} in ${channelIdentifier}`)
+      return true
+    } catch (err) {
+      console.warn(`[Mirror] Failed to delete Telegram message #${messageId}:`, err)
+      return false
     }
   }
 

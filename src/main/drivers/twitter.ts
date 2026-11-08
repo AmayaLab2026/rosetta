@@ -654,6 +654,27 @@ export class TwitterDriver {
       errors
     }
   }
+
+  /**
+   * Check if a tweet exists on Twitter (returns false if 404/deleted)
+   */
+  async checkTweetExists(account: Account, tweetId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`https://x.com/${account.username}/status/${tweetId}`, {
+        method: 'HEAD',
+        headers: {
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+        }
+      })
+      if (res.status === 404) {
+        return false
+      }
+      return true
+    } catch {
+      return true
+    }
+  }
 }
 
 export const twitterDriver = new TwitterDriver()

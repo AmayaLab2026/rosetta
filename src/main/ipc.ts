@@ -94,7 +94,12 @@ export function registerIpcHandlers(): void {
     if (!pendingAuthReq) {
       throw new Error('Telegram auth parameters expired. Please restart login.')
     }
-    return telegramMirrorService.submitCode(pendingAuthReq, submit)
+    const acc = await telegramMirrorService.submitCode(pendingAuthReq, submit)
+    // Auto start mirror service on login
+    telegramMirrorService.start().catch((err) => {
+      console.warn('[Rosetta] Auto-start engine after login failed:', err)
+    })
+    return acc
   })
 
   // --- Rules ---

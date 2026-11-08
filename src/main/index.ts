@@ -52,8 +52,7 @@ app.whenReady().then(async () => {
     const settings = appStore.getSettings()
     if (settings.autoStartEngineOnLaunch !== false) {
       const tgAccount = appStore.getAccounts().find((a) => a.platform === 'telegram' && a.status === 'active')
-      const hasEnabledRules = appStore.getRules().some((r) => r.enabled)
-      if (tgAccount && hasEnabledRules) {
+      if (tgAccount) {
         console.log('[Rosetta] Auto-starting Telegram mirror listener on app launch...')
         telegramMirrorService.start().catch((err) => {
           console.warn('[Rosetta] Auto-start engine failed:', err)
