@@ -2,6 +2,7 @@
   "name": "rosetta",
   "version": "0.1.0",
   "description": "Rosetta - Multi-platform social sync & Telegram channel mirror workstation",
+  "author": "LycorisNeko",
   "main": "./out/main/index.js",
   "scripts": {
     "typecheck": "tsc --noEmit",
