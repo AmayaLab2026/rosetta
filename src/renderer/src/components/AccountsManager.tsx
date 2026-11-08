@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Account } from '../../../shared/types'
 import { CheckCircle2, AlertCircle, RefreshCw, Trash2, Globe, ExternalLink } from 'lucide-react'
 import { useI18n } from '../i18n'
@@ -30,6 +30,16 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   const [tgLoading, setTgLoading] = useState(false)
   const [tgStep, setTgStep] = useState<'initial' | 'code'>('initial')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    window.rosetta.getSettings?.().then((settings) => {
+      if (settings) {
+        if (settings.telegramApiId) setTgApiId(String(settings.telegramApiId))
+        if (settings.telegramApiHash) setTgApiHash(settings.telegramApiHash)
+        if (settings.telegramPhone) setTgPhone(settings.telegramPhone)
+      }
+    }).catch(() => {})
+  }, [])
 
   const twitterAccount = accounts.find((a) => a.platform === 'twitter')
   const telegramAccount = accounts.find((a) => a.platform === 'telegram')

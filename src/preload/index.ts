@@ -34,6 +34,10 @@ const api: RosettaAPI = {
   getLogs: (limit) => ipcRenderer.invoke('logs:get', limit),
   clearLogs: () => ipcRenderer.invoke('logs:clear'),
 
+  // Settings
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
+
   // Listeners
   onLogAdded: (callback) => {
     const handler = (_: any, log: any) => callback(log)

@@ -2,10 +2,34 @@ import { MirrorFilterConfig } from '../../shared/types'
 
 export class ContentPipeline {
   /**
+   * Format attribution footer: RT:@channel 西元YYYY年M月D日 HH:mm or 来自:@channel 西元YYYY年M月D日 HH:mm
+   */
+  static formatAttribution(
+    channelIdentifier: string,
+    style: 'RT' | 'from' | 'none' = 'RT',
+    date: Date = new Date()
+  ): string {
+    if (style === 'none' || !channelIdentifier) return ''
+    const prefix = style === 'from' ? '来自' : 'RT'
+    const cleanChannel = channelIdentifier.startsWith('@') ? channelIdentifier : `@${channelIdentifier}`
+    const year = date.getFullYear()
+    const month = date.getMonth() + 1
+    const day = date.getDate()
+    const hours = String(date.getHours()).padStart(2, '0')
+    const mins = String(date.getMinutes()).padStart(2, '0')
+    return `${prefix}:${cleanChannel} 西元${year}年${month}月${day}日 ${hours}:${mins}`
+  }
+
+  /**
    * Process raw text from Telegram according to mirror filter rules
    */
-  static process(rawText: string, config: MirrorFilterConfig): { text: string; shouldDrop: boolean } {
-    let result = rawText.trim()
+  static process(
+    rawText: string,
+    config: MirrorFilterConfig,
+    sourceChannel?: string,
+    messageDate?: Date
+  ): { text: string; shouldDrop: boolean } {
+    let result = (rawText || '').trim()
 
     // 1. Check for drop/ad keywords
     if (config.stripAdKeywords && config.stripAdKeywords.length > 0) {
@@ -47,16 +71,28 @@ export class ContentPipeline {
     // 6. Clean up multiple blank lines
     result = result.replace(/\n{3,}/g, '\n\n').trim()
 
-    if (!result) {
-      return { text: '', shouldDrop: true }
-    }
-
     // 7. Apply prefix and suffix
-    if (config.prefix) {
+    if (config.prefix && result) {
       result = `${config.prefix.trim()}\n\n${result}`
     }
-    if (config.suffix) {
+    if (config.suffix && result) {
       result = `${result}\n\n${config.suffix.trim()}`
+    }
+
+    // 8. Append attribution tag (RT:@xxx or 来自:@xxx 西元xxx)
+    if (sourceChannel && config.attributionStyle !== 'none') {
+      const attribution = this.formatAttribution(
+        sourceChannel,
+        config.attributionStyle || 'RT',
+        messageDate || new Date()
+      )
+      if (attribution) {
+        result = result ? `${result}\n\n${attribution}` : attribution
+      }
+    }
+
+    if (!result) {
+      return { text: '', shouldDrop: true }
     }
 
     return { text: result.trim(), shouldDrop: false }

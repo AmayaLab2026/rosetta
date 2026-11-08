@@ -34,6 +34,7 @@ export interface MirrorFilterConfig {
   autoSplitThread: boolean // Split >280 char posts into Twitter Thread
   forwardMedia: boolean
   autoSyncDeletion?: boolean // Sync deletion when source Telegram message is deleted
+  attributionStyle?: 'RT' | 'from' | 'none' // 'RT': RT:@channel 西元..., 'from': 来自:@channel 西元..., 'none'
 }
 
 export interface MirrorRule {
@@ -88,6 +89,7 @@ export interface MirroredPostRecord {
 export interface UnifiedPostPayload {
   text: string
   mediaPaths?: string[]
+  mediaFiles?: Array<{ dataBase64: string; name: string; type: string }>
   targets: Array<{
     platform: PlatformType
     accountId: string
@@ -139,6 +141,10 @@ export interface RosettaAPI {
   // Logs
   getLogs: (limit?: number) => Promise<MirrorLogItem[]>
   clearLogs: () => Promise<boolean>
+
+  // Settings
+  getSettings: () => Promise<{ telegramApiId?: number; telegramApiHash?: string; telegramPhone?: string; autoStartEngineOnLaunch?: boolean }>
+  saveSettings: (settings: Partial<{ telegramApiId?: number; telegramApiHash?: string; telegramPhone?: string; autoStartEngineOnLaunch?: boolean }>) => Promise<boolean>
 
   // Listeners
   onLogAdded: (callback: (log: MirrorLogItem) => void) => () => void

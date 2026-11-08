@@ -72,6 +72,7 @@
     "stripHashtags": "清除话题标签",
     "autoThread": "超长自动拆分 Thread (>280字)",
     "autoSyncDeletion": "源消息删除时同步删除镜像推文",
+    "attributionFormatLabel": "转发与频道来源标签格式 (文末自动附加)",
     "cancel": "取消",
     "saveRule": "保存镜像规则",
     "active": "运行中",

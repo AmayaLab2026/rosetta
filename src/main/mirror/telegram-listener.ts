@@ -183,7 +183,7 @@ export class TelegramMirrorService {
    */
   private async handleIncomingMessage(event: any): Promise<void> {
     const message = event.message
-    if (!message || !message.message) return
+    if (!message || (!message.message && !message.media)) return
 
     const chat = await message.getChat()
     const rawText = message.message || ''
@@ -191,6 +191,21 @@ export class TelegramMirrorService {
     const chatUsername = chat?.username ? `@${chat.username}` : ''
     const chatId = chat?.id?.toString() || ''
     const chatTitle = chat?.title || chatUsername || 'Channel'
+    const channelAttributionHandle = chatUsername || chatTitle
+    const messageDate = message.date ? new Date(message.date * 1000) : new Date()
+
+    // Download media if message has photo/document
+    const mediaBuffers: Buffer[] = []
+    if (message.media && this.client) {
+      try {
+        const buf = await this.client.downloadMedia(message, {})
+        if (buf && Buffer.isBuffer(buf) && buf.length > 0) {
+          mediaBuffers.push(buf)
+        }
+      } catch (err) {
+        console.warn('[Mirror] Failed to download media from Telegram:', err)
+      }
+    }
 
     // Find all matching enabled rules
     const rules = appStore.getRules().filter((r) => {
@@ -213,7 +228,7 @@ export class TelegramMirrorService {
           ruleId: rule.id,
           sourceChannel: chatTitle,
           targetPlatform: rule.targetAccount.platform,
-          originalText: rawText,
+          originalText: rawText || '(Media Message)',
           processedText: '',
           mediaCount: 0,
           status: 'failed',
@@ -222,17 +237,22 @@ export class TelegramMirrorService {
         continue
       }
 
-      // Process content through pipeline
-      const { text: processedText, shouldDrop } = ContentPipeline.process(rawText, rule.filters)
+      // Process content through pipeline with attribution footer (RT:@xxx or 来自:@xxx 西元xxx)
+      const { text: processedText, shouldDrop } = ContentPipeline.process(
+        rawText,
+        rule.filters,
+        channelAttributionHandle,
+        messageDate
+      )
 
-      if (shouldDrop || !processedText) {
+      if (shouldDrop && mediaBuffers.length === 0) {
         this.emitLog({
           id: logId,
           timestamp: new Date().toISOString(),
           ruleId: rule.id,
           sourceChannel: chatTitle,
           targetPlatform: rule.targetAccount.platform,
-          originalText: rawText,
+          originalText: rawText || '(Media Message)',
           processedText: '(Filtered by content rules)',
           mediaCount: 0,
           status: 'filtered'
@@ -242,15 +262,36 @@ export class TelegramMirrorService {
 
       // Dispatch to Twitter/X
       if (rule.targetAccount.platform === 'twitter') {
+        // Upload media attachments to Twitter if enabled
+        const mediaIds: string[] = []
+        if (rule.filters.forwardMedia !== false && mediaBuffers.length > 0) {
+          for (const buf of mediaBuffers) {
+            try {
+              const upRes = await twitterDriver.uploadMedia(targetAccount, buf)
+              if (upRes.success && upRes.mediaId) {
+                mediaIds.push(upRes.mediaId)
+              }
+            } catch (err) {
+              console.warn('[Mirror] Failed to upload media to Twitter:', err)
+            }
+          }
+        }
+
+        const tweetContent = processedText || ContentPipeline.formatAttribution(
+          channelAttributionHandle,
+          rule.filters.attributionStyle || 'RT',
+          messageDate
+        )
+
         const chunks = rule.filters.autoSplitThread
-          ? ContentPipeline.splitIntoThreadChunks(processedText)
-          : [processedText]
+          ? ContentPipeline.splitIntoThreadChunks(tweetContent)
+          : [tweetContent]
 
         let publishRes
         if (chunks.length > 1) {
-          publishRes = await twitterDriver.postThread(targetAccount, chunks)
+          publishRes = await twitterDriver.postThread(targetAccount, chunks, mediaIds)
         } else {
-          publishRes = await twitterDriver.postTweet(targetAccount, chunks[0])
+          publishRes = await twitterDriver.postTweet(targetAccount, chunks[0], undefined, mediaIds)
         }
 
         // Update rule stats
@@ -284,9 +325,9 @@ export class TelegramMirrorService {
           ruleId: rule.id,
           sourceChannel: chatTitle,
           targetPlatform: 'twitter',
-          originalText: rawText,
-          processedText,
-          mediaCount: 0,
+          originalText: rawText || '(Media Message)',
+          processedText: tweetContent,
+          mediaCount: mediaIds.length,
           status: publishRes.success ? 'success' : 'failed',
           errorMessage: publishRes.error,
           targetUrl: publishRes.url

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Account } from '../../../shared/types'
-import { Send, CheckCircle2, AlertCircle, Layers } from 'lucide-react'
+import { Send, CheckCircle2, AlertCircle, Layers, Image as ImageIcon, X } from 'lucide-react'
 import { useI18n } from '../i18n'
 
 interface ComposerProps {
@@ -10,6 +10,7 @@ interface ComposerProps {
 export const Composer: React.FC<ComposerProps> = ({ accounts }) => {
   const { t } = useI18n()
   const [text, setText] = useState('')
+  const [mediaFiles, setMediaFiles] = useState<Array<{ dataBase64: string; name: string; type: string }>>([])
   const [splitThread, setSplitThread] = useState(true)
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -61,8 +62,30 @@ export const Composer: React.FC<ComposerProps> = ({ accounts }) => {
     return chunks.map((c, i) => `${c} (${i + 1}/${chunks.length})`)
   }, [text, willThread])
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    const fileList = Array.from(files)
+    // Up to 4 images max on Twitter
+    for (const file of fileList.slice(0, 4 - mediaFiles.length)) {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result as string
+        setMediaFiles((prev) => [
+          ...prev,
+          {
+            dataBase64: result,
+            name: file.name,
+            type: file.type
+          }
+        ])
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   const handlePublish = async () => {
-    if (!text.trim() || selectedAccountIds.length === 0) return
+    if ((!text.trim() && mediaFiles.length === 0) || selectedAccountIds.length === 0) return
     setIsSubmitting(true)
     setResultMsg(null)
 
@@ -74,6 +97,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts }) => {
 
       const res = await window.rosetta.sendUnifiedPost({
         text,
+        mediaFiles: mediaFiles.length > 0 ? mediaFiles : undefined,
         targets,
         options: { splitThreadIfLong: splitThread }
       })
@@ -86,6 +110,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts }) => {
           url: firstSuccess?.url
         })
         setText('')
+        setMediaFiles([])
       } else {
         const err = res.results.find((r) => r.error)?.error || 'Failed to publish post'
         setResultMsg({ type: 'error', text: err })
@@ -142,13 +167,44 @@ export const Composer: React.FC<ComposerProps> = ({ accounts }) => {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={t.composer.placeholder}
-          rows={7}
+          rows={6}
           className="w-full bg-background/50 border border-surface-border rounded-lg p-3.5 text-sm text-foreground placeholder-gray-400 focus:outline-none focus:border-brand focus:bg-surface transition-all resize-none font-sans"
         />
+
+        {/* Media Attachments Preview */}
+        {mediaFiles.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {mediaFiles.map((f, i) => (
+              <div key={i} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-surface-border bg-black/5">
+                <img src={f.dataBase64} alt={f.name} className="w-full h-full object-cover" />
+                <button
+                  onClick={() => setMediaFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="absolute top-1 right-1 bg-black/70 hover:bg-black text-white rounded-full p-0.5 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Status / Character bar */}
         <div className="flex items-center justify-between pt-2 border-t border-surface-border">
           <div className="flex items-center gap-4 text-xs font-mono">
+            {/* Image attachment button */}
+            <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-surface-border hover:border-gray-400 bg-surface text-gray-700 hover:text-foreground cursor-pointer text-xs font-mono transition-colors">
+              <ImageIcon className="w-3.5 h-3.5 text-brand" />
+              <span>图片 ({mediaFiles.length}/4)</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+                disabled={mediaFiles.length >= 4}
+              />
+            </label>
+
             <div className="flex items-center gap-1.5">
               <span
                 className={`font-semibold ${
@@ -182,7 +238,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts }) => {
 
           <button
             onClick={handlePublish}
-            disabled={isSubmitting || !text.trim() || selectedAccountIds.length === 0}
+            disabled={isSubmitting || (!text.trim() && mediaFiles.length === 0) || selectedAccountIds.length === 0}
             className="flex items-center gap-2 px-5 py-2 rounded-lg bg-brand hover:bg-brand-hover text-white text-xs font-mono font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-glow-terracotta active:scale-[0.98]"
           >
             <Send className="w-3.5 h-3.5" />

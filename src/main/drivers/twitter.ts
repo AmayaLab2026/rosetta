@@ -228,12 +228,67 @@ export class TwitterDriver {
   }
 
   /**
+   * Upload an image to Twitter/X (simple upload endpoint for media < 5MB)
+   */
+  async uploadMedia(
+    account: Account,
+    mediaData: Buffer | Uint8Array | string
+  ): Promise<{ success: boolean; mediaId?: string; error?: string }> {
+    const { authToken, ct0 } = account.credentials
+    if (!authToken || !ct0) {
+      return { success: false, error: 'Missing auth credentials' }
+    }
+
+    try {
+      const base64Str =
+        typeof mediaData === 'string'
+          ? mediaData.replace(/^data:image\/\w+;base64,/, '')
+          : Buffer.from(mediaData).toString('base64')
+
+      const formData = new URLSearchParams()
+      formData.append('media_data', base64Str)
+
+      const response = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
+        method: 'POST',
+        headers: {
+          authorization: TWITTER_BEARER_TOKEN,
+          'x-csrf-token': ct0,
+          'x-twitter-auth-type': 'OAuth2Session',
+          'x-twitter-active-user': 'yes',
+          cookie: `auth_token=${authToken}; ct0=${ct0}`,
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+          referer: 'https://x.com/'
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errText = await response.text()
+        return { success: false, error: `Upload HTTP ${response.status}: ${errText.slice(0, 100)}` }
+      }
+
+      const data = (await response.json()) as any
+      const mediaId = data.media_id_string || (data.media_id ? String(data.media_id) : undefined)
+      if (!mediaId) {
+        return { success: false, error: 'Failed to retrieve media_id from Twitter' }
+      }
+
+      console.log(`[TwitterDriver] Uploaded media successfully, mediaId: ${mediaId}`)
+      return { success: true, mediaId }
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Media upload failed' }
+    }
+  }
+
+  /**
    * Post a tweet using reverse-engineered GraphQL API with dynamic x-client-transaction-id
    */
   async postTweet(
     account: Account,
     text: string,
-    inReplyToTweetId?: string
+    inReplyToTweetId?: string,
+    mediaIds?: string[]
   ): Promise<TwitterPublishResult> {
     const { authToken, ct0 } = account.credentials
     if (!authToken || !ct0) {
@@ -261,6 +316,14 @@ export class TwitterDriver {
                 reply: {
                   in_reply_to_tweet_id: inReplyToTweetId,
                   exclude_reply_user_ids: []
+                }
+              }
+            : {}),
+          ...(mediaIds && mediaIds.length > 0
+            ? {
+                media: {
+                  media_entities: mediaIds.map((id) => ({ media_id: id, tagged_users: [] })),
+                  possibly_sensitive: false
                 }
               }
             : {})
@@ -480,14 +543,15 @@ export class TwitterDriver {
   /**
    * Post multiple tweets as a threaded sequence
    */
-  async postThread(account: Account, chunks: string[]): Promise<TwitterPublishResult> {
+  async postThread(account: Account, chunks: string[], mediaIds?: string[]): Promise<TwitterPublishResult> {
     let lastId: string | undefined = undefined
     let firstUrl: string | undefined = undefined
     const allTweetIds: string[] = []
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i]
-      const res = await this.postTweet(account, chunk, lastId)
+      const chunkMedia = i === 0 ? mediaIds : undefined
+      const res = await this.postTweet(account, chunk, lastId, chunkMedia)
       if (!res.success) {
         return {
           success: false,

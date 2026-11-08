@@ -76,6 +76,12 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('telegram:request-code', async (_, req: TelegramAuthRequest) => {
     pendingAuthReq = req
+    // Remember credentials in settings
+    appStore.updateSettings({
+      telegramApiId: req.apiId,
+      telegramApiHash: req.apiHash,
+      telegramPhone: req.phoneNumber
+    })
     return telegramMirrorService.requestCode(req)
   })
 
@@ -143,15 +149,30 @@ export function registerIpcHandlers(): void {
       }
 
       if (target.platform === 'twitter') {
+        // Upload any attached media files
+        const mediaIds: string[] = []
+        if (payload.mediaFiles && payload.mediaFiles.length > 0) {
+          for (const file of payload.mediaFiles) {
+            try {
+              const uploadRes = await twitterDriver.uploadMedia(account, file.dataBase64)
+              if (uploadRes.success && uploadRes.mediaId) {
+                mediaIds.push(uploadRes.mediaId)
+              }
+            } catch (err: any) {
+              console.warn('[Composer] Failed to upload media:', err)
+            }
+          }
+        }
+
         const chunks = payload.options?.splitThreadIfLong
           ? ContentPipeline.splitIntoThreadChunks(payload.text)
           : [payload.text]
 
         if (chunks.length > 1) {
-          const res = await twitterDriver.postThread(account, chunks)
+          const res = await twitterDriver.postThread(account, chunks, mediaIds)
           results.push({ platform: 'twitter', ...res })
         } else {
-          const res = await twitterDriver.postTweet(account, chunks[0])
+          const res = await twitterDriver.postTweet(account, chunks[0], undefined, mediaIds)
           results.push({ platform: 'twitter', ...res })
         }
       }
@@ -161,6 +182,16 @@ export function registerIpcHandlers(): void {
       success: results.every((r) => r.success),
       results
     }
+  })
+
+  // --- Settings ---
+  ipcMain.handle('settings:get', () => {
+    return appStore.getSettings()
+  })
+
+  ipcMain.handle('settings:save', (_, settings) => {
+    appStore.updateSettings(settings)
+    return true
   })
 
   // --- Logs ---

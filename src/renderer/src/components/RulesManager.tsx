@@ -27,6 +27,7 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
   const [suffix, setSuffix] = useState('')
   const [autoSplitThread, setAutoSplitThread] = useState(true)
   const [autoSyncDeletion, setAutoSyncDeletion] = useState(true)
+  const [attributionStyle, setAttributionStyle] = useState<'RT' | 'from' | 'none'>('RT')
 
   const twitterAccounts = accounts.filter((a) => a.platform === 'twitter' && a.status === 'active')
 
@@ -73,6 +74,7 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
         suffix: suffix.trim() || undefined,
         autoSplitThread,
         autoSyncDeletion,
+        attributionStyle,
         forwardMedia: true
       },
       stats: {
@@ -252,6 +254,47 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
             </label>
           </div>
 
+          <div className="pt-1">
+            <label className="text-[11px] font-mono text-gray-600 block mb-1.5">
+              {t.rules.attributionFormatLabel}
+            </label>
+            <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="attributionStyle"
+                  value="RT"
+                  checked={attributionStyle === 'RT'}
+                  onChange={() => setAttributionStyle('RT')}
+                  className="text-brand focus:ring-brand"
+                />
+                <span>RT:@频道 西元xxx</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="attributionStyle"
+                  value="from"
+                  checked={attributionStyle === 'from'}
+                  onChange={() => setAttributionStyle('from')}
+                  className="text-brand focus:ring-brand"
+                />
+                <span>来自:@频道 西元xxx</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="attributionStyle"
+                  value="none"
+                  checked={attributionStyle === 'none'}
+                  onChange={() => setAttributionStyle('none')}
+                  className="text-brand focus:ring-brand"
+                />
+                <span className="text-gray-500">不附带标签</span>
+              </label>
+            </div>
+          </div>
+
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
@@ -343,6 +386,11 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
                 {rule.filters.autoSyncDeletion !== false && (
                   <span className="bg-brand-subtle px-1.5 py-0.5 rounded border border-brand-border text-brand font-medium">
                     {t.rules.autoSyncDeletionBadge}
+                  </span>
+                )}
+                {rule.filters.attributionStyle !== 'none' && (
+                  <span className="bg-surface-muted px-1.5 py-0.5 rounded border border-surface-border text-gray-600">
+                    {rule.filters.attributionStyle === 'from' ? '来自:@' : 'RT:@'} 标签
                   </span>
                 )}
                 {rule.filters.stripAdKeywords.length > 0 && (

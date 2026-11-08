@@ -11,6 +11,8 @@ interface StoreData {
   settings: {
     telegramApiId?: number
     telegramApiHash?: string
+    telegramPhone?: string
+    autoStartEngineOnLaunch?: boolean
   }
 }
 
@@ -19,7 +21,9 @@ const DEFAULT_STORE: StoreData = {
   rules: [],
   logs: [],
   mirroredPosts: [],
-  settings: {}
+  settings: {
+    autoStartEngineOnLaunch: true
+  }
 }
 
 export class AppStore {

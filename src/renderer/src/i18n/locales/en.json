@@ -72,6 +72,7 @@
     "stripHashtags": "Strip hashtags",
     "autoThread": "Auto Thread (>280c)",
     "autoSyncDeletion": "Sync delete on source message removal",
+    "attributionFormatLabel": "Attribution & Channel Tag Format (Appended to post)",
     "cancel": "Cancel",
     "saveRule": "Save Mirror Rule",
     "active": "Active",
