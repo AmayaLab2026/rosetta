@@ -33,6 +33,7 @@ export interface MirrorFilterConfig {
   suffix?: string
   autoSplitThread: boolean // Split >280 char posts into Twitter Thread
   forwardMedia: boolean
+  autoSyncDeletion?: boolean // Sync deletion when source Telegram message is deleted
 }
 
 export interface MirrorRule {
@@ -67,9 +68,21 @@ export interface MirrorLogItem {
   originalText: string
   processedText: string
   mediaCount: number
-  status: 'success' | 'failed' | 'filtered' | 'processing'
+  status: 'success' | 'failed' | 'filtered' | 'processing' | 'deleted'
   errorMessage?: string
   targetUrl?: string
+}
+
+export interface MirroredPostRecord {
+  id: string
+  ruleId: string
+  telegramChannelId: string
+  telegramChannelUsername?: string
+  telegramMessageId: number
+  targetPlatform: PlatformType
+  targetAccountId: string
+  targetTweetIds: string[]
+  createdAt: string
 }
 
 export interface UnifiedPostPayload {

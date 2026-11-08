@@ -1,6 +1,6 @@
 import React from 'react'
 import { MirrorLogItem, MirrorRule, Account } from '../../../shared/types'
-import { Radio, ArrowRight, ExternalLink, CheckCircle2, AlertCircle, Filter, Sparkles } from 'lucide-react'
+import { Radio, ArrowRight, ExternalLink, CheckCircle2, AlertCircle, Filter, Sparkles, Trash2 } from 'lucide-react'
 import { useI18n } from '../i18n'
 
 interface MirrorStudioProps {
@@ -185,6 +185,12 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
                       <span className="flex items-center gap-1 text-[11px] font-mono text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">
                         <Filter className="w-3 h-3" />
                         {t.studio.filtered}
+                      </span>
+                    )}
+                    {log.status === 'deleted' && (
+                      <span className="flex items-center gap-1 text-[11px] font-mono text-rose-900 bg-rose-50 px-2 py-0.5 rounded border border-rose-300">
+                        <Trash2 className="w-3 h-3 text-rose-600" />
+                        {t.studio.deleted}
                       </span>
                     )}
                     {log.status === 'failed' && (

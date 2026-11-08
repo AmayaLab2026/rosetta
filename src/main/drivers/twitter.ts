@@ -6,10 +6,12 @@ const TWITTER_BEARER_TOKEN =
   'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA'
 
 const ACTIVE_QUERY_ID = 'UecQIuYzi2MCOah7-eOpcQ'
+const DELETE_QUERY_ID = 'VaenaVgh5q5ih7kvyVjgtg'
 
 export interface TwitterPublishResult {
   success: boolean
   tweetId?: string
+  tweetIds?: string[]
   url?: string
   error?: string
 }
@@ -334,6 +336,7 @@ export class TwitterDriver {
       return {
         success: true,
         tweetId,
+        tweetIds: [tweetId],
         url: directUrl
       }
     } catch (err: any) {
@@ -480,6 +483,7 @@ export class TwitterDriver {
   async postThread(account: Account, chunks: string[]): Promise<TwitterPublishResult> {
     let lastId: string | undefined = undefined
     let firstUrl: string | undefined = undefined
+    const allTweetIds: string[] = []
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i]
@@ -487,10 +491,12 @@ export class TwitterDriver {
       if (!res.success) {
         return {
           success: false,
+          tweetIds: allTweetIds,
           error: `Failed on part ${i + 1}/${chunks.length}: ${res.error}`
         }
       }
       lastId = res.tweetId
+      if (res.tweetId) allTweetIds.push(res.tweetId)
       if (i === 0) firstUrl = res.url
       await new Promise((r) => setTimeout(r, 1200))
     }
@@ -498,7 +504,90 @@ export class TwitterDriver {
     return {
       success: true,
       tweetId: lastId,
+      tweetIds: allTweetIds,
       url: firstUrl
+    }
+  }
+
+  /**
+   * Delete a tweet by ID using GraphQL mutation
+   */
+  async deleteTweet(account: Account, tweetId: string): Promise<{ success: boolean; error?: string }> {
+    const { authToken, ct0 } = account.credentials
+    if (!authToken || !ct0) {
+      return { success: false, error: 'Missing auth_token or ct0 credentials' }
+    }
+
+    try {
+      const path = `/i/api/graphql/${DELETE_QUERY_ID}/DeleteTweet`
+      const url = `https://x.com${path}`
+
+      const payload = {
+        variables: {
+          tweet_id: tweetId,
+          dark_request: false
+        },
+        queryId: DELETE_QUERY_ID
+      }
+
+      const headers: Record<string, string> = {
+        authorization: TWITTER_BEARER_TOKEN,
+        'x-csrf-token': ct0,
+        'x-twitter-auth-type': 'OAuth2Session',
+        'x-twitter-active-user': 'yes',
+        'content-type': 'application/json',
+        cookie: `auth_token=${authToken}; ct0=${ct0}`,
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        referer: 'https://x.com/'
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        return { success: false, error: `HTTP ${response.status}` }
+      }
+
+      const data = (await response.json()) as any
+      if (data.errors && data.errors.length > 0) {
+        return { success: false, error: data.errors[0]?.message || 'Delete tweet failed' }
+      }
+
+      console.log(`[TwitterDriver] Tweet ${tweetId} deleted successfully from X`)
+      return { success: true }
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Network error deleting tweet' }
+    }
+  }
+
+  /**
+   * Delete multiple tweets (e.g. all tweets in a mirrored thread)
+   */
+  async deleteThread(
+    account: Account,
+    tweetIds: string[]
+  ): Promise<{ success: boolean; deletedCount: number; errors: string[] }> {
+    let deletedCount = 0
+    const errors: string[] = []
+
+    for (const tid of tweetIds) {
+      const res = await this.deleteTweet(account, tid)
+      if (res.success) {
+        deletedCount++
+      } else if (res.error) {
+        errors.push(`Tweet ${tid}: ${res.error}`)
+      }
+      await new Promise((r) => setTimeout(r, 600))
+    }
+
+    return {
+      success: errors.length === 0,
+      deletedCount,
+      errors
     }
   }
 }

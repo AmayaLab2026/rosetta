@@ -2,6 +2,7 @@ import { TelegramClient, Api } from 'telegram'
 import { computeCheck } from 'telegram/Password'
 import { StringSession } from 'telegram/sessions'
 import { NewMessage } from 'telegram/events'
+import { DeletedMessage } from 'telegram/events/DeletedMessage'
 import { BrowserWindow } from 'electron'
 import { appStore } from '../storage/store'
 import { twitterDriver } from '../drivers/twitter'
@@ -141,6 +142,15 @@ export class TelegramMirrorService {
         }
       }, new NewMessage({}))
 
+      // Register deleted message listener (Auto-delete mirrored posts)
+      this.client.addEventHandler(async (event: any) => {
+        try {
+          await this.handleDeletedMessages(event)
+        } catch (err) {
+          console.error('[Mirror] Error handling deleted messages:', err)
+        }
+      }, new DeletedMessage({}))
+
       this.notifyStatusChange()
       return true
     } catch (err) {
@@ -248,6 +258,22 @@ export class TelegramMirrorService {
         if (publishRes.success) {
           rule.stats.totalForwarded += 1
           rule.stats.lastMirroredAt = new Date().toISOString()
+
+          // Track mapping for automatic synchronized deletion
+          const targetTweetIds = publishRes.tweetIds || (publishRes.tweetId ? [publishRes.tweetId] : [])
+          if (targetTweetIds.length > 0) {
+            appStore.saveMirroredPost({
+              id: `mp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              ruleId: rule.id,
+              telegramChannelId: chatId,
+              telegramChannelUsername: chatUsername,
+              telegramMessageId: message.id,
+              targetPlatform: 'twitter',
+              targetAccountId: targetAccount.id,
+              targetTweetIds,
+              createdAt: new Date().toISOString()
+            })
+          }
         }
         appStore.saveRule(rule)
 
@@ -265,6 +291,77 @@ export class TelegramMirrorService {
           errorMessage: publishRes.error,
           targetUrl: publishRes.url
         })
+      }
+    }
+  }
+
+  /**
+   * Handle deleted messages from Telegram channels and automatically delete mirrored posts
+   */
+  private async handleDeletedMessages(event: any): Promise<void> {
+    const deletedIds: number[] = event.deletedIds || (event.id ? [event.id] : [])
+    if (!deletedIds || deletedIds.length === 0) return
+
+    let channelId = ''
+    if (event.peer?.channelId) {
+      channelId = event.peer.channelId.toString()
+    } else if (event.chatId) {
+      channelId = event.chatId.toString()
+    }
+
+    console.log(
+      `[Mirror] Telegram delete event detected for IDs: [${deletedIds.join(', ')}] in channel: ${
+        channelId || 'all/global'
+      }`
+    )
+
+    for (const msgId of deletedIds) {
+      // Find mirrored post mappings
+      let matchedRecords = channelId
+        ? appStore.findMirroredPostsByTelegram(channelId, msgId)
+        : []
+
+      // Fallback: check by msgId if channelId not provided in update
+      if (matchedRecords.length === 0) {
+        matchedRecords = appStore.findMirroredPostsByMessageId(msgId)
+      }
+
+      if (matchedRecords.length === 0) continue
+
+      for (const record of matchedRecords) {
+        const rule = appStore.getRule(record.ruleId)
+        if (rule && rule.filters.autoSyncDeletion === false) {
+          console.log(`[Mirror] Rule "${rule.name}" has autoSyncDeletion disabled, skipping.`)
+          continue
+        }
+
+        const targetAccount = appStore.getAccount(record.targetAccountId)
+        if (!targetAccount) continue
+
+        if (record.targetPlatform === 'twitter' && record.targetTweetIds?.length > 0) {
+          console.log(
+            `[Mirror] Auto-deleting mirrored Twitter post [${record.targetTweetIds.join(
+              ', '
+            )}] for Telegram msg #${msgId}`
+          )
+
+          const delRes = await twitterDriver.deleteThread(targetAccount, record.targetTweetIds)
+
+          const logId = `log_del_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+          this.emitLog({
+            id: logId,
+            timestamp: new Date().toISOString(),
+            ruleId: record.ruleId,
+            sourceChannel: record.telegramChannelUsername || record.telegramChannelId || 'Telegram Channel',
+            targetPlatform: 'twitter',
+            originalText: `[消息被撤回/删除] 源电报频道删除了消息 #${msgId}`,
+            processedText: `[自动同步删除] 已在 X / Twitter 上删除对应的 ${delRes.deletedCount} 条推文`,
+            mediaCount: 0,
+            status: 'deleted'
+          })
+
+          appStore.deleteMirroredPost(record.id)
+        }
       }
     }
   }

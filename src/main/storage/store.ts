@@ -1,12 +1,13 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
-import { Account, MirrorRule, MirrorLogItem } from '../../shared/types'
+import { Account, MirrorRule, MirrorLogItem, MirroredPostRecord } from '../../shared/types'
 
 interface StoreData {
   accounts: Account[]
   rules: MirrorRule[]
   logs: MirrorLogItem[]
+  mirroredPosts: MirroredPostRecord[]
   settings: {
     telegramApiId?: number
     telegramApiHash?: string
@@ -17,6 +18,7 @@ const DEFAULT_STORE: StoreData = {
   accounts: [],
   rules: [],
   logs: [],
+  mirroredPosts: [],
   settings: {}
 }
 
@@ -45,7 +47,12 @@ export class AppStore {
     try {
       if (existsSync(this.filePath)) {
         const raw = readFileSync(this.filePath, 'utf-8')
-        return { ...DEFAULT_STORE, ...JSON.parse(raw) }
+        const parsed = JSON.parse(raw)
+        return {
+          ...DEFAULT_STORE,
+          ...parsed,
+          mirroredPosts: parsed.mirroredPosts || []
+        }
       }
     } catch (e) {
       console.error('[Store] Failed to load store, using default:', e)
@@ -135,6 +142,39 @@ export class AppStore {
 
   public clearLogs(): void {
     this.data.logs = []
+    this.persist()
+  }
+
+  // --- Mirrored Posts Mapping (for Auto-Delete) ---
+  public saveMirroredPost(record: MirroredPostRecord): void {
+    if (!this.data.mirroredPosts) this.data.mirroredPosts = []
+    this.data.mirroredPosts.push(record)
+    // Keep max 3,000 mappings
+    if (this.data.mirroredPosts.length > 3000) {
+      this.data.mirroredPosts = this.data.mirroredPosts.slice(-3000)
+    }
+    this.persist()
+  }
+
+  public findMirroredPostsByTelegram(channelId: string, messageId: number): MirroredPostRecord[] {
+    if (!this.data.mirroredPosts) return []
+    const normChannelId = channelId.replace(/^-100/, '').replace(/^@/, '').toLowerCase()
+    return this.data.mirroredPosts.filter((m) => {
+      const storedChannel = (m.telegramChannelId || '').replace(/^-100/, '').replace(/^@/, '').toLowerCase()
+      const storedUsername = (m.telegramChannelUsername || '').replace(/^@/, '').toLowerCase()
+      const channelMatches = !channelId || storedChannel === normChannelId || storedUsername === normChannelId
+      return channelMatches && m.telegramMessageId === messageId
+    })
+  }
+
+  public findMirroredPostsByMessageId(messageId: number): MirroredPostRecord[] {
+    if (!this.data.mirroredPosts) return []
+    return this.data.mirroredPosts.filter((m) => m.telegramMessageId === messageId)
+  }
+
+  public deleteMirroredPost(id: string): void {
+    if (!this.data.mirroredPosts) return
+    this.data.mirroredPosts = this.data.mirroredPosts.filter((m) => m.id !== id)
     this.persist()
   }
 

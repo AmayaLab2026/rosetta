@@ -10,7 +10,7 @@ interface LogsViewProps {
 
 export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
   const { t } = useI18n()
-  const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'filtered' | 'failed'>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'filtered' | 'deleted' | 'failed'>('all')
   const [searchTerm, setSearchTerm] = useState('')
 
   const filteredLogs = logs.filter((log) => {
@@ -52,6 +52,7 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
             { id: 'all', label: t.logs.filterAll },
             { id: 'success', label: t.logs.filterSuccess },
             { id: 'filtered', label: t.logs.filterFiltered },
+            { id: 'deleted', label: t.logs.filterDeleted },
             { id: 'failed', label: t.logs.filterFailed }
           ].map((item) => (
             <button
@@ -108,6 +109,12 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
                   <span className="flex items-center gap-1 text-[11px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">
                     <Filter className="w-3 h-3" />
                     {t.studio.filtered}
+                  </span>
+                )}
+                {log.status === 'deleted' && (
+                  <span className="flex items-center gap-1 text-[11px] text-rose-900 bg-rose-50 px-2 py-0.5 rounded border border-rose-300">
+                    <Trash2 className="w-3 h-3 text-rose-600" />
+                    {t.studio.deleted}
                   </span>
                 )}
                 {log.status === 'failed' && (
