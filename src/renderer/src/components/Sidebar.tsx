@@ -75,10 +75,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>{t.sidebar.engineTitle}</span>
           <span className="text-gray-700 font-medium">GramJS + X Web</span>
         </div>
-        <div className="flex items-center justify-between">
-          <span>{t.sidebar.paletteTitle}</span>
-          <span className="text-brand font-medium">{t.sidebar.paletteDesc}</span>
-        </div>
       </div>
     </aside>
   )
