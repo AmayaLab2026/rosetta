@@ -18,6 +18,8 @@ jobs:
   build-windows:
     name: Build Windows Installer (x64)
     runs-on: windows-latest
+    env:
+      ELECTRON_MIRROR: "https://npmmirror.com/mirrors/electron/"
 
     steps:
       - name: Checkout Code
