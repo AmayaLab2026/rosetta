@@ -421,7 +421,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
             </div>
 
             <a
-              href="https://github.com"
+              href="https://github.com/LycorisNeko/rosetta"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-foreground hover:bg-surface-hover rounded-md border border-surface-border transition-colors"
