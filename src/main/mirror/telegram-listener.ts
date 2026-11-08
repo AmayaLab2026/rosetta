@@ -1,4 +1,5 @@
-import { TelegramClient } from 'telegram'
+import { TelegramClient, Api } from 'telegram'
+import { computeCheck } from 'telegram/Password'
 import { StringSession } from 'telegram/sessions'
 import { NewMessage } from 'telegram/events'
 import { BrowserWindow } from 'electron'
@@ -49,21 +50,41 @@ export class TelegramMirrorService {
     submit: TelegramAuthCodeSubmit
   ): Promise<Account> {
     if (!this.authClient) {
-      throw new Error('No active Telegram auth session. Please request code first.')
+      throw new Error('当前没有活跃的 Telegram 验证会话，请先获取验证码。')
     }
 
-    await this.authClient.signInUser(
-      {
-        apiId: authInfo.apiId,
-        apiHash: authInfo.apiHash
-      },
-      {
-        phoneNumber: submit.phoneNumber,
-        phoneCodeHash: submit.phoneCodeHash,
-        phoneCode: submit.code,
-        password: submit.password ? async () => submit.password! : undefined
+    try {
+      await this.authClient.invoke(
+        new Api.auth.SignIn({
+          phoneNumber: submit.phoneNumber,
+          phoneCodeHash: submit.phoneCodeHash,
+          phoneCode: submit.code.trim()
+        })
+      )
+    } catch (err: any) {
+      if (err.errorMessage === 'SESSION_PASSWORD_NEEDED') {
+        if (!submit.password) {
+          throw new Error('该 Telegram 账号开启了两步验证 (2FA)，请输入两步验证密码后再点击完成。')
+        }
+        const passwordSrpResult = await this.authClient.invoke(new Api.account.GetPassword())
+        const passwordSrpCheck = await computeCheck(passwordSrpResult, submit.password.trim())
+        await this.authClient.invoke(
+          new Api.auth.CheckPassword({
+            password: passwordSrpCheck
+          })
+        )
+      } else {
+        let msg = err.errorMessage || err.message || 'Telegram 验证失败'
+        if (msg === 'PHONE_CODE_INVALID') {
+          msg = '验证码错误 (PHONE_CODE_INVALID)，请核对后重试'
+        } else if (msg === 'PHONE_CODE_EXPIRED') {
+          msg = '验证码已过期 (PHONE_CODE_EXPIRED)，请返回重新获取'
+        } else if (msg === 'PASSWORD_HASH_INVALID') {
+          msg = '两步验证密码错误 (PASSWORD_HASH_INVALID)，请核对后重试'
+        }
+        throw new Error(msg)
       }
-    )
+    }
 
     const me = (await this.authClient.getMe()) as any
     const sessionString = (this.authClient.session.save() as unknown) as string

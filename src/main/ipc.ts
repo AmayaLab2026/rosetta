@@ -72,11 +72,13 @@ export function registerIpcHandlers(): void {
   })
 
   // --- Telegram Auth ---
+  let pendingAuthReq: TelegramAuthRequest | null = null
+
   ipcMain.handle('telegram:request-code', async (_, req: TelegramAuthRequest) => {
+    pendingAuthReq = req
     return telegramMirrorService.requestCode(req)
   })
 
-  let pendingAuthReq: TelegramAuthRequest | null = null
   ipcMain.handle('telegram:prepare-auth', (_, req: TelegramAuthRequest) => {
     pendingAuthReq = req
     return true
