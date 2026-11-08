@@ -155,6 +155,10 @@ export class AppStore {
   }
 
   // --- Mirrored Posts Mapping (for Auto-Delete) ---
+  public getMirroredPosts(): MirroredPostRecord[] {
+    return this.data.mirroredPosts || []
+  }
+
   public saveMirroredPost(record: MirroredPostRecord): void {
     if (!this.data.mirroredPosts) this.data.mirroredPosts = []
     this.data.mirroredPosts.push(record)
