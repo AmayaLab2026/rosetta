@@ -1,6 +1,6 @@
 import React from 'react'
-import { Cpu } from 'lucide-react'
 import { useI18n } from '../i18n'
+import logoImg from '../assets/logo.png'
 
 interface HeaderProps {
   engineRunning: boolean
@@ -18,8 +18,8 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="h-14 border-b border-surface-border bg-surface/90 backdrop-blur-md px-5 flex items-center justify-between select-none">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-md bg-brand flex items-center justify-center shadow-glow-terracotta">
-            <Cpu className="w-3.5 h-3.5 text-white" />
+          <div className="w-7 h-7 rounded-lg overflow-hidden border border-surface-border shadow-sm flex items-center justify-center bg-white shrink-0">
+            <img src={logoImg} alt="Rosetta Logo" className="w-full h-full object-cover" />
           </div>
           <span className="font-semibold text-sm tracking-tight text-foreground font-mono">
             Rosetta

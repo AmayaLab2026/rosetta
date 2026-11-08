@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
 import { telegramMirrorService } from './mirror/telegram-listener'
@@ -9,6 +10,7 @@ export { twitterDriver } from './drivers/twitter'
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
+  const iconPath = join(__dirname, '../../resources/icon.png')
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 820,
@@ -18,6 +20,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     backgroundColor: '#FAF9F5',
     titleBarStyle: 'hiddenInset',
+    icon: existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
