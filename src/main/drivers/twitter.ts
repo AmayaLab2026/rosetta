@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { Account } from '../../shared/types'
 import { generateTwitterTransactionId } from './twitter-transaction'
+import { ContentPipeline } from '../mirror/pipeline'
 
 const TWITTER_BEARER_TOKEN =
   'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA'
@@ -570,6 +571,95 @@ export class TwitterDriver {
       tweetId: lastId,
       tweetIds: allTweetIds,
       url: firstUrl
+    }
+  }
+
+  /**
+   * Publish a tweet or thread with all media bundled together.
+   * - Bundles up to 6 images per tweet (per user requirements).
+   * - If the account or endpoint rejects >4 images, dynamically falls back to 4 per tweet.
+   * - Excess images (or long text) are chained as a thread sequence.
+   */
+  async publishPostWithMedia(
+    account: Account,
+    text: string,
+    mediaIds: string[] = [],
+    autoSplitThread = true
+  ): Promise<TwitterPublishResult> {
+    if (!mediaIds || mediaIds.length === 0) {
+      const chunks = autoSplitThread ? ContentPipeline.splitIntoThreadChunks(text) : [text]
+      if (chunks.length > 1) {
+        return this.postThread(account, chunks)
+      }
+      return this.postTweet(account, chunks[0] || '')
+    }
+
+    // Helper to post thread with given batch size
+    const executeThread = async (batchSize: number): Promise<TwitterPublishResult> => {
+      const mediaBatches: string[][] = []
+      for (let i = 0; i < mediaIds.length; i += batchSize) {
+        mediaBatches.push(mediaIds.slice(i, i + batchSize))
+      }
+
+      const textChunks = autoSplitThread
+        ? ContentPipeline.splitIntoThreadChunks(text)
+        : [text]
+
+      const totalSteps = Math.max(textChunks.length, mediaBatches.length)
+      const allTweetIds: string[] = []
+      let lastId: string | undefined = undefined
+      let firstUrl: string | undefined = undefined
+
+      for (let i = 0; i < totalSteps; i++) {
+        const chunkText = textChunks[i] || ''
+        const chunkMedia = mediaBatches[i] || undefined
+
+        const res = await this.postTweet(account, chunkText, lastId, chunkMedia)
+        if (!res.success) {
+          // If first post failed due to exceeding allowed media count, signal retry
+          if (
+            i === 0 &&
+            batchSize > 4 &&
+            res.error &&
+            (res.error.includes('4') ||
+              res.error.toLowerCase().includes('media') ||
+              res.error.toLowerCase().includes('limit'))
+          ) {
+            throw new Error('ERR_MEDIA_LIMIT_EXCEEDED')
+          }
+
+          return {
+            success: false,
+            tweetIds: allTweetIds,
+            error: `Failed on part ${i + 1}/${totalSteps}: ${res.error}`
+          }
+        }
+
+        lastId = res.tweetId
+        if (res.tweetId) allTweetIds.push(res.tweetId)
+        if (i === 0) firstUrl = res.url
+
+        if (i < totalSteps - 1) {
+          await new Promise((r) => setTimeout(r, 1200))
+        }
+      }
+
+      return {
+        success: true,
+        tweetId: lastId,
+        tweetIds: allTweetIds,
+        url: firstUrl
+      }
+    }
+
+    try {
+      return await executeThread(6)
+    } catch (err: any) {
+      if (err.message === 'ERR_MEDIA_LIMIT_EXCEEDED') {
+        console.warn('[TwitterDriver] Account media limit is 4 images, retrying thread with 4 images per tweet...')
+        return await executeThread(4)
+      }
+      return { success: false, error: err.message || 'Media thread posting failed' }
     }
   }
 

@@ -14,6 +14,22 @@ export class TelegramMirrorService {
   private isRunning: boolean = false
   private authClient: TelegramClient | null = null
   private twitterCheckInterval: NodeJS.Timeout | null = null
+  private albumBuffers = new Map<
+    string,
+    {
+      groupedId: string
+      chat: any
+      chatId: string
+      chatUsername: string
+      chatTitle: string
+      messageIds: number[]
+      rawTexts: string[]
+      attributionSource: { username?: string; name?: string }
+      messageDate: Date
+      mediaBuffers: Buffer[]
+      timer?: NodeJS.Timeout
+    }
+  >()
 
   public getStatus() {
     const rules = appStore.getRules().filter((r) => r.enabled)
@@ -185,7 +201,9 @@ export class TelegramMirrorService {
   }
 
   /**
-   * Handle incoming message event from Telegram
+   * Handle incoming message event from Telegram.
+   * If message belongs to an album (groupedId), debounces and aggregates all media and caption
+   * into a single unified post before dispatching to Twitter.
    */
   private async handleIncomingMessage(event: any): Promise<void> {
     const message = event.message
@@ -232,18 +250,128 @@ export class TelegramMirrorService {
       }
     }
 
-    // Download media if message has photo/document
-    const mediaBuffers: Buffer[] = []
+    // Download media buffer if present
+    let downloadedBuf: Buffer | null = null
     if (message.media && this.client) {
       try {
         const buf = await this.client.downloadMedia(message, {})
         if (buf && Buffer.isBuffer(buf) && buf.length > 0) {
-          mediaBuffers.push(buf)
+          downloadedBuf = buf
         }
       } catch (err) {
         console.warn('[Mirror] Failed to download media from Telegram:', err)
       }
     }
+
+    // Check if message belongs to an album (groupedId)
+    const groupedId = message.groupedId ? message.groupedId.toString() : null
+
+    if (groupedId) {
+      let album = this.albumBuffers.get(groupedId)
+      if (!album) {
+        album = {
+          groupedId,
+          chat,
+          chatId,
+          chatUsername,
+          chatTitle,
+          messageIds: [],
+          rawTexts: [],
+          attributionSource,
+          messageDate,
+          mediaBuffers: []
+        }
+        this.albumBuffers.set(groupedId, album)
+      }
+
+      if (album.timer) {
+        clearTimeout(album.timer)
+      }
+
+      album.messageIds.push(message.id)
+      if (rawText.trim()) {
+        album.rawTexts.push(rawText.trim())
+      }
+      if (downloadedBuf) {
+        album.mediaBuffers.push(downloadedBuf)
+      }
+      if (!album.attributionSource.username && !album.attributionSource.name) {
+        album.attributionSource = attributionSource
+      }
+
+      // Wait 1200ms for sibling media messages to arrive before publishing
+      album.timer = setTimeout(() => {
+        this.flushAlbum(groupedId)
+      }, 1200)
+
+      return
+    }
+
+    // Single individual post: process immediately
+    await this.processAggregatedMessage({
+      chat,
+      chatId,
+      chatUsername,
+      chatTitle,
+      messageIds: [message.id],
+      rawText,
+      mediaBuffers: downloadedBuf ? [downloadedBuf] : [],
+      attributionSource,
+      messageDate
+    })
+  }
+
+  /**
+   * Flush and publish an entire aggregated album of media
+   */
+  private async flushAlbum(groupedId: string): Promise<void> {
+    const album = this.albumBuffers.get(groupedId)
+    if (!album) return
+    this.albumBuffers.delete(groupedId)
+
+    const rawText = album.rawTexts.join('\n\n') || ''
+    console.log(
+      `[Mirror] Album ${groupedId} aggregated ${album.mediaBuffers.length} images and ${album.messageIds.length} messages. Processing mirror...`
+    )
+
+    await this.processAggregatedMessage({
+      chat: album.chat,
+      chatId: album.chatId,
+      chatUsername: album.chatUsername,
+      chatTitle: album.chatTitle,
+      messageIds: album.messageIds,
+      rawText,
+      mediaBuffers: album.mediaBuffers,
+      attributionSource: album.attributionSource,
+      messageDate: album.messageDate
+    })
+  }
+
+  /**
+   * Process and mirror an aggregated message (with full set of media) to target platforms
+   */
+  private async processAggregatedMessage(params: {
+    chat: any
+    chatId: string
+    chatUsername: string
+    chatTitle: string
+    messageIds: number[]
+    rawText: string
+    mediaBuffers: Buffer[]
+    attributionSource: { username?: string; name?: string }
+    messageDate: Date
+  }): Promise<void> {
+    const {
+      chat,
+      chatId,
+      chatUsername,
+      chatTitle,
+      messageIds,
+      rawText,
+      mediaBuffers,
+      attributionSource,
+      messageDate
+    } = params
 
     // Find all matching enabled rules (match against username, channel title, or channel ID)
     const rules = appStore.getRules().filter((r) => {
@@ -277,7 +405,7 @@ export class TelegramMirrorService {
           ruleId: rule.id,
           sourceChannel: chatTitle,
           targetPlatform: rule.targetAccount.platform,
-          originalText: rawText || '(Media Message)',
+          originalText: rawText || (mediaBuffers.length > 0 ? `[全套图片 - 共 ${mediaBuffers.length} 张]` : '(Media Message)'),
           processedText: '',
           mediaCount: 0,
           status: 'failed',
@@ -311,9 +439,10 @@ export class TelegramMirrorService {
 
       // Dispatch to Twitter/X
       if (rule.targetAccount.platform === 'twitter') {
-        // Upload media attachments to Twitter if enabled
+        // Upload all media attachments to Twitter
         const mediaIds: string[] = []
         if (rule.filters.forwardMedia !== false && mediaBuffers.length > 0) {
+          console.log(`[Mirror] Uploading ${mediaBuffers.length} media attachments to X...`)
           for (const buf of mediaBuffers) {
             try {
               const upRes = await twitterDriver.uploadMedia(targetAccount, buf)
@@ -334,16 +463,13 @@ export class TelegramMirrorService {
             messageDate
           )
 
-        const chunks = rule.filters.autoSplitThread
-          ? ContentPipeline.splitIntoThreadChunks(tweetContent)
-          : [tweetContent]
-
-        let publishRes
-        if (chunks.length > 1) {
-          publishRes = await twitterDriver.postThread(targetAccount, chunks, mediaIds)
-        } else {
-          publishRes = await twitterDriver.postTweet(targetAccount, chunks[0], undefined, mediaIds)
-        }
+        // Publish full batch of images (up to 6 per tweet, dynamically chained into thread if >6 or API restricted)
+        const publishRes = await twitterDriver.publishPostWithMedia(
+          targetAccount,
+          tweetContent,
+          mediaIds,
+          rule.filters.autoSplitThread !== false
+        )
 
         // Update rule stats
         rule.stats.totalReceived += 1
@@ -351,20 +477,22 @@ export class TelegramMirrorService {
           rule.stats.totalForwarded += 1
           rule.stats.lastMirroredAt = new Date().toISOString()
 
-          // Track mapping for automatic synchronized deletion
+          // Track mapping for all message IDs in the album for automatic synchronized deletion
           const targetTweetIds = publishRes.tweetIds || (publishRes.tweetId ? [publishRes.tweetId] : [])
           if (targetTweetIds.length > 0) {
-            appStore.saveMirroredPost({
-              id: `mp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-              ruleId: rule.id,
-              telegramChannelId: chatId,
-              telegramChannelUsername: chatUsername,
-              telegramMessageId: message.id,
-              targetPlatform: 'twitter',
-              targetAccountId: targetAccount.id,
-              targetTweetIds,
-              createdAt: new Date().toISOString()
-            })
+            for (const msgId of messageIds) {
+              appStore.saveMirroredPost({
+                id: `mp_${Date.now()}_${msgId}_${Math.random().toString(36).substring(2, 6)}`,
+                ruleId: rule.id,
+                telegramChannelId: chatId,
+                telegramChannelUsername: chatUsername,
+                telegramMessageId: msgId,
+                targetPlatform: 'twitter',
+                targetAccountId: targetAccount.id,
+                targetTweetIds,
+                createdAt: new Date().toISOString()
+              })
+            }
           }
         }
         appStore.saveRule(rule)
@@ -376,7 +504,7 @@ export class TelegramMirrorService {
           ruleId: rule.id,
           sourceChannel: chatTitle,
           targetPlatform: 'twitter',
-          originalText: rawText || '(Media Message)',
+          originalText: rawText || (mediaBuffers.length > 0 ? `[全套图片 - 共 ${mediaBuffers.length} 张]` : '(Media Message)'),
           processedText: tweetContent,
           mediaCount: mediaIds.length,
           status: publishRes.success ? 'success' : 'failed',

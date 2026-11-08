@@ -169,17 +169,13 @@ export function registerIpcHandlers(): void {
           }
         }
 
-        const chunks = payload.options?.splitThreadIfLong
-          ? ContentPipeline.splitIntoThreadChunks(payload.text)
-          : [payload.text]
-
-        if (chunks.length > 1) {
-          const res = await twitterDriver.postThread(account, chunks, mediaIds)
-          results.push({ platform: 'twitter', ...res })
-        } else {
-          const res = await twitterDriver.postTweet(account, chunks[0], undefined, mediaIds)
-          results.push({ platform: 'twitter', ...res })
-        }
+        const res = await twitterDriver.publishPostWithMedia(
+          account,
+          payload.text,
+          mediaIds,
+          payload.options?.splitThreadIfLong !== false
+        )
+        results.push({ platform: 'twitter', ...res })
       }
     }
 

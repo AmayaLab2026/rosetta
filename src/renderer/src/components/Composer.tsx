@@ -66,8 +66,8 @@ export const Composer: React.FC<ComposerProps> = ({ accounts }) => {
     const files = e.target.files
     if (!files || files.length === 0) return
     const fileList = Array.from(files)
-    // Up to 4 images max on Twitter
-    for (const file of fileList.slice(0, 4 - mediaFiles.length)) {
+    // Support multiple images per tweet/thread
+    for (const file of fileList.slice(0, 12 - mediaFiles.length)) {
       const reader = new FileReader()
       reader.onload = () => {
         const result = reader.result as string
