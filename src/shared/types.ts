@@ -112,6 +112,16 @@ export interface TelegramAuthCodeSubmit {
   password?: string
 }
 
+export interface AppSettings {
+  telegramApiId?: number
+  telegramApiHash?: string
+  telegramPhone?: string
+  autoStartEngineOnLaunch?: boolean
+  openAtLogin?: boolean
+  minimizeToTray?: boolean
+  startMinimized?: boolean
+}
+
 export interface RosettaAPI {
   // Accounts
   getAccounts: () => Promise<Account[]>
@@ -142,9 +152,12 @@ export interface RosettaAPI {
   getLogs: (limit?: number) => Promise<MirrorLogItem[]>
   clearLogs: () => Promise<boolean>
 
-  // Settings
-  getSettings: () => Promise<{ telegramApiId?: number; telegramApiHash?: string; telegramPhone?: string; autoStartEngineOnLaunch?: boolean }>
-  saveSettings: (settings: Partial<{ telegramApiId?: number; telegramApiHash?: string; telegramPhone?: string; autoStartEngineOnLaunch?: boolean }>) => Promise<boolean>
+  // Settings & System
+  getSettings: () => Promise<AppSettings>
+  saveSettings: (settings: Partial<AppSettings>) => Promise<boolean>
+  openDataDirectory: () => Promise<boolean>
+  getLoginItemSettings: () => Promise<{ openAtLogin: boolean; openAsHidden?: boolean }>
+  setLoginItemSettings: (settings: { openAtLogin: boolean; openAsHidden?: boolean }) => Promise<{ openAtLogin: boolean }>
 
   // Listeners
   onLogAdded: (callback: (log: MirrorLogItem) => void) => () => void

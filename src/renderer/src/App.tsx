@@ -6,6 +6,7 @@ import { Composer } from './components/Composer'
 import { RulesManager } from './components/RulesManager'
 import { AccountsManager } from './components/AccountsManager'
 import { LogsView } from './components/LogsView'
+import { SettingsView } from './components/SettingsView'
 import { Account, MirrorRule, MirrorLogItem } from '../../shared/types'
 import { I18nProvider, useI18n } from './i18n'
 
@@ -130,6 +131,13 @@ function RosettaMain() {
                 await window.rosetta.clearLogs()
                 setLogs([])
               }}
+            />
+          )}
+
+          {currentTab === 'settings' && (
+            <SettingsView
+              engineRunning={engineRunning}
+              accounts={accounts}
             />
           )}
         </main>

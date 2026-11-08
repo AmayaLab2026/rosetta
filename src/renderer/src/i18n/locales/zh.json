@@ -13,6 +13,7 @@
     "rules": "镜像规则",
     "accounts": "账号与授权",
     "logs": "活动流水",
+    "settings": "系统设置",
     "engineTitle": "引擎内核",
     "paletteTitle": "配色体系",
     "paletteDesc": "Claude 暖色纸质"
@@ -132,5 +133,35 @@
     "sourceTelegram": "Telegram 来源：",
     "mirroredTweet": "同步推文：",
     "viewLink": "直达推文"
+  },
+  "settings": {
+    "title": "系统设置",
+    "desc": "管理开机自启、托盘行为、监听引擎以及本地数据存储",
+    "startupSection": "启动与托盘",
+    "startupDesc": "系统集成与后台托盘驻留行为",
+    "openAtLogin": "开机自动启动",
+    "openAtLoginSub": "在登录操作系统时自动在后台启动 Rosetta",
+    "minimizeToTray": "关闭窗口时最小化到托盘",
+    "minimizeToTraySub": "点击窗口关闭按钮 (X) 时隐藏至系统托盘，不中断后台镜像转发",
+    "startMinimized": "静默后台启动",
+    "startMinimizedSub": "随开机启动时不弹出主窗口，直接常驻托盘并运行",
+    "engineSection": "镜像监听引擎",
+    "engineDesc": "自动化监听与投递调度设置",
+    "autoStart": "随软件启动自动开启监听",
+    "autoStartSub": "启动 Rosetta 时自动建立 Telegram MTProto 监听信道",
+    "engineRunning": "引擎当前正在监听中",
+    "engineStopped": "引擎当前已停止",
+    "credentialsSection": "Telegram 凭据与安全",
+    "credentialsDesc": "已保存的 MTProto 身份凭据 (保存在本地配置)",
+    "storageSection": "存储与日志管理",
+    "storageDesc": "Rosetta 本地数据库、历史记录及缓存管理",
+    "openDataDir": "打开本地数据目录",
+    "clearLogs": "清空所有流水日志",
+    "clearLogsConfirm": "确定要清空所有历史流水日志吗？此操作无法撤销。",
+    "aboutSection": "关于 Rosetta",
+    "version": "版本",
+    "architecture": "技术架构",
+    "githubRepo": "GitHub 开源仓库",
+    "saveSuccess": "设置已保存"
   }
 }

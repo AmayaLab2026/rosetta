@@ -34,9 +34,12 @@ const api: RosettaAPI = {
   getLogs: (limit) => ipcRenderer.invoke('logs:get', limit),
   clearLogs: () => ipcRenderer.invoke('logs:clear'),
 
-  // Settings
+  // Settings & System
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
+  openDataDirectory: () => ipcRenderer.invoke('app:open-data-dir'),
+  getLoginItemSettings: () => ipcRenderer.invoke('settings:get-login-item'),
+  setLoginItemSettings: (settings) => ipcRenderer.invoke('settings:set-login-item', settings),
 
   // Listeners
   onLogAdded: (callback) => {

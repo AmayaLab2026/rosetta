@@ -1,19 +1,14 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
-import { Account, MirrorRule, MirrorLogItem, MirroredPostRecord } from '../../shared/types'
+import { Account, MirrorRule, MirrorLogItem, MirroredPostRecord, AppSettings } from '../../shared/types'
 
 interface StoreData {
   accounts: Account[]
   rules: MirrorRule[]
   logs: MirrorLogItem[]
   mirroredPosts: MirroredPostRecord[]
-  settings: {
-    telegramApiId?: number
-    telegramApiHash?: string
-    telegramPhone?: string
-    autoStartEngineOnLaunch?: boolean
-  }
+  settings: AppSettings
 }
 
 const DEFAULT_STORE: StoreData = {
@@ -22,7 +17,10 @@ const DEFAULT_STORE: StoreData = {
   logs: [],
   mirroredPosts: [],
   settings: {
-    autoStartEngineOnLaunch: true
+    autoStartEngineOnLaunch: true,
+    minimizeToTray: true,
+    openAtLogin: false,
+    startMinimized: false
   }
 }
 

@@ -1,8 +1,8 @@
 import React from 'react'
-import { Radio, Send, Sliders, Users, Terminal } from 'lucide-react'
+import { Radio, Send, Sliders, Users, Terminal, Settings } from 'lucide-react'
 import { useI18n } from '../i18n'
 
-export type TabType = 'studio' | 'composer' | 'rules' | 'accounts' | 'logs'
+export type TabType = 'studio' | 'composer' | 'rules' | 'accounts' | 'logs' | 'settings'
 
 interface SidebarProps {
   currentTab: TabType
@@ -26,7 +26,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'composer', label: t.sidebar.composer, icon: Send },
     { id: 'rules', label: t.sidebar.rules, icon: Sliders, count: rulesCount },
     { id: 'accounts', label: t.sidebar.accounts, icon: Users, count: accountsCount },
-    { id: 'logs', label: t.sidebar.logs, icon: Terminal, count: logsCount }
+    { id: 'logs', label: t.sidebar.logs, icon: Terminal, count: logsCount },
+    { id: 'settings', label: (t.sidebar as any).settings || '系统设置', icon: Settings }
   ]
 
   return (

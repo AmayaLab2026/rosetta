@@ -13,6 +13,7 @@
     "rules": "Mirror Rules",
     "accounts": "Accounts & Auth",
     "logs": "Activity Logs",
+    "settings": "Settings",
     "engineTitle": "Engine",
     "paletteTitle": "Palette",
     "paletteDesc": "Claude Warm Paper"
@@ -132,5 +133,35 @@
     "sourceTelegram": "Telegram Source:",
     "mirroredTweet": "Mirrored Tweet:",
     "viewLink": "Link"
+  },
+  "settings": {
+    "title": "Settings",
+    "desc": "Manage auto-start, system tray behavior, mirror engine, and local storage",
+    "startupSection": "Startup & System Tray",
+    "startupDesc": "System integration and background tray persistence",
+    "openAtLogin": "Launch at System Startup",
+    "openAtLoginSub": "Automatically launch Rosetta in the background when logging into the OS",
+    "minimizeToTray": "Minimize to Tray on Close",
+    "minimizeToTraySub": "Hide window to system tray when clicking close (X) instead of terminating mirroring",
+    "startMinimized": "Start Minimized to Tray",
+    "startMinimizedSub": "Do not show main window on boot; remain silently running in system tray",
+    "engineSection": "Mirror Engine",
+    "engineDesc": "Automated listener and dispatch dispatching settings",
+    "autoStart": "Auto-Start Listener on App Launch",
+    "autoStartSub": "Automatically connect Telegram MTProto listener whenever Rosetta starts",
+    "engineRunning": "Engine is actively listening",
+    "engineStopped": "Engine is currently stopped",
+    "credentialsSection": "Telegram Credentials & Security",
+    "credentialsDesc": "Configured MTProto credentials stored locally",
+    "storageSection": "Storage & Logs",
+    "storageDesc": "Local JSON store, activity stream logs, and cache management",
+    "openDataDir": "Open Local Data Directory",
+    "clearLogs": "Clear All Activity Logs",
+    "clearLogsConfirm": "Are you sure you want to clear all activity logs? This action cannot be undone.",
+    "aboutSection": "About Rosetta",
+    "version": "Version",
+    "architecture": "Architecture",
+    "githubRepo": "GitHub Repository",
+    "saveSuccess": "Settings saved"
   }
 }

@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, app, shell } from 'electron'
 import { appStore } from './storage/store'
 import { twitterDriver } from './drivers/twitter'
 import { telegramMirrorService } from './mirror/telegram-listener'
@@ -210,7 +210,7 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  // --- Settings ---
+  // --- Settings & OS Integration ---
   ipcMain.handle('settings:get', () => {
     return appStore.getSettings()
   })
@@ -218,6 +218,55 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('settings:save', (_, settings) => {
     appStore.updateSettings(settings)
     return true
+  })
+
+  ipcMain.handle('app:open-data-dir', async () => {
+    try {
+      const dir = app.getPath('userData')
+      await shell.openPath(dir)
+      return true
+    } catch (e) {
+      console.error('[IPC] Failed to open data directory:', e)
+      return false
+    }
+  })
+
+  ipcMain.handle('settings:get-login-item', () => {
+    try {
+      const loginSettings = app.getLoginItemSettings()
+      return {
+        openAtLogin: loginSettings.openAtLogin,
+        openAsHidden: loginSettings.wasOpenedAsHidden
+      }
+    } catch (e) {
+      console.warn('[IPC] Failed to query login item settings:', e)
+      const stored = appStore.getSettings()
+      return { openAtLogin: !!stored.openAtLogin, openAsHidden: !!stored.startMinimized }
+    }
+  })
+
+  ipcMain.handle('settings:set-login-item', (_, options: { openAtLogin: boolean; openAsHidden?: boolean }) => {
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: options.openAtLogin,
+        openAsHidden: options.openAsHidden ?? false,
+        path: process.execPath,
+        args: options.openAsHidden ? ['--hidden'] : []
+      })
+      appStore.updateSettings({
+        openAtLogin: options.openAtLogin,
+        startMinimized: options.openAsHidden ?? false
+      })
+      const current = app.getLoginItemSettings()
+      return { openAtLogin: current.openAtLogin }
+    } catch (e) {
+      console.warn('[IPC] Failed to set login item settings:', e)
+      appStore.updateSettings({
+        openAtLogin: options.openAtLogin,
+        startMinimized: options.openAsHidden ?? false
+      })
+      return { openAtLogin: options.openAtLogin }
+    }
   })
 
   // --- Logs ---
