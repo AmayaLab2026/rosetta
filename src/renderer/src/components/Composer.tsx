@@ -176,7 +176,11 @@ export const Composer: React.FC<ComposerProps> = ({ accounts }) => {
           <div className="flex flex-wrap gap-2 pt-1">
             {mediaFiles.map((f, i) => (
               <div key={i} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-surface-border bg-black/5">
-                <img src={f.dataBase64} alt={f.name} className="w-full h-full object-cover" />
+                {f.type.startsWith('video/') ? (
+                  <video src={f.dataBase64} className="w-full h-full object-cover" muted />
+                ) : (
+                  <img src={f.dataBase64} alt={f.name} className="w-full h-full object-cover" />
+                )}
                 <button
                   onClick={() => setMediaFiles((prev) => prev.filter((_, idx) => idx !== i))}
                   className="absolute top-1 right-1 bg-black/70 hover:bg-black text-white rounded-full p-0.5 transition-colors"
@@ -191,17 +195,17 @@ export const Composer: React.FC<ComposerProps> = ({ accounts }) => {
         {/* Status / Character bar */}
         <div className="flex items-center justify-between pt-2 border-t border-surface-border">
           <div className="flex items-center gap-4 text-xs font-mono">
-            {/* Image attachment button */}
+            {/* Media attachment button */}
             <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-surface-border hover:border-gray-400 bg-surface text-gray-700 hover:text-foreground cursor-pointer text-xs font-mono transition-colors">
               <ImageIcon className="w-3.5 h-3.5 text-brand" />
-              <span>图片 ({mediaFiles.length}/4)</span>
+              <span>多媒体 ({mediaFiles.length}/12)</span>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 multiple
                 onChange={handleFileSelect}
                 className="hidden"
-                disabled={mediaFiles.length >= 4}
+                disabled={mediaFiles.length >= 12}
               />
             </label>
 

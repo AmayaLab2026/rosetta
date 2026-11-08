@@ -229,23 +229,169 @@ export class TwitterDriver {
   }
 
   /**
-   * Upload an image to Twitter/X (simple upload endpoint for media < 5MB)
+   * Chunked Media Upload: Required for videos (mp4) and large files.
+   * Performs INIT -> APPEND (chunks) -> FINALIZE -> STATUS polling.
    */
-  async uploadMedia(
+  async uploadChunkedMedia(
     account: Account,
-    mediaData: Buffer | Uint8Array | string
+    buffer: Buffer,
+    mediaType: string = 'video/mp4',
+    mediaCategory: 'tweet_video' | 'tweet_image' = 'tweet_video'
   ): Promise<{ success: boolean; mediaId?: string; error?: string }> {
     const { authToken, ct0 } = account.credentials
     if (!authToken || !ct0) {
       return { success: false, error: 'Missing auth credentials' }
     }
 
-    try {
-      const base64Str =
-        typeof mediaData === 'string'
-          ? mediaData.replace(/^data:image\/\w+;base64,/, '')
-          : Buffer.from(mediaData).toString('base64')
+    const headers: Record<string, string> = {
+      authorization: TWITTER_BEARER_TOKEN,
+      'x-csrf-token': ct0,
+      'x-twitter-auth-type': 'OAuth2Session',
+      'x-twitter-active-user': 'yes',
+      cookie: `auth_token=${authToken}; ct0=${ct0}`,
+      'user-agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+      referer: 'https://x.com/'
+    }
 
+    try {
+      // 1. INIT
+      const initParams = new URLSearchParams({
+        command: 'INIT',
+        total_bytes: String(buffer.length),
+        media_type: mediaType,
+        media_category: mediaCategory
+      })
+
+      const initRes = await fetch(`https://upload.twitter.com/1.1/media/upload.json?${initParams.toString()}`, {
+        method: 'POST',
+        headers
+      })
+
+      if (!initRes.ok) {
+        const errText = await initRes.text()
+        return { success: false, error: `INIT failed HTTP ${initRes.status}: ${errText.slice(0, 100)}` }
+      }
+
+      const initData = (await initRes.json()) as any
+      const mediaId = initData.media_id_string || String(initData.media_id)
+      if (!mediaId) {
+        return { success: false, error: 'Failed to obtain media_id from INIT' }
+      }
+
+      // 2. APPEND (chunks of 4MB)
+      const CHUNK_SIZE = 4 * 1024 * 1024
+      let segmentIndex = 0
+
+      for (let offset = 0; offset < buffer.length; offset += CHUNK_SIZE) {
+        const chunk = buffer.subarray(offset, Math.min(offset + CHUNK_SIZE, buffer.length))
+        const form = new FormData()
+        form.append('command', 'APPEND')
+        form.append('media_id', mediaId)
+        form.append('segment_index', String(segmentIndex))
+        form.append('media', new Blob([chunk]))
+
+        const appendRes = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
+          method: 'POST',
+          headers,
+          body: form
+        })
+
+        if (!appendRes.ok && appendRes.status !== 204) {
+          const errText = await appendRes.text()
+          return { success: false, error: `APPEND failed HTTP ${appendRes.status}: ${errText.slice(0, 100)}` }
+        }
+
+        segmentIndex++
+      }
+
+      // 3. FINALIZE
+      const finParams = new URLSearchParams({
+        command: 'FINALIZE',
+        media_id: mediaId
+      })
+
+      const finRes = await fetch(`https://upload.twitter.com/1.1/media/upload.json?${finParams.toString()}`, {
+        method: 'POST',
+        headers
+      })
+
+      if (!finRes.ok) {
+        const errText = await finRes.text()
+        return { success: false, error: `FINALIZE failed HTTP ${finRes.status}: ${errText.slice(0, 100)}` }
+      }
+
+      const finData = (await finRes.json()) as any
+
+      // 4. Poll STATUS if asynchronous processing is in progress
+      if (finData.processing_info) {
+        let state = finData.processing_info.state
+        let checkAfter = (finData.processing_info.check_after_secs || 1) * 1000
+
+        while (state === 'pending' || state === 'in_progress') {
+          await new Promise((r) => setTimeout(r, checkAfter))
+
+          const statusRes = await fetch(
+            `https://upload.twitter.com/1.1/media/upload.json?command=STATUS&media_id=${mediaId}`,
+            { headers }
+          )
+
+          if (!statusRes.ok) break
+          const statusData = (await statusRes.json()) as any
+          state = statusData.processing_info?.state
+          checkAfter = (statusData.processing_info?.check_after_secs || 2) * 1000
+
+          if (state === 'failed') {
+            return {
+              success: false,
+              error: statusData.processing_info?.error?.message || 'Video processing failed on X'
+            }
+          }
+        }
+      }
+
+      console.log(`[TwitterDriver] Chunked media upload successful! mediaId: ${mediaId}`)
+      return { success: true, mediaId }
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Chunked media upload failed' }
+    }
+  }
+
+  /**
+   * Upload media to Twitter/X. Automatically switches to chunked upload for videos or large files.
+   */
+  async uploadMedia(
+    account: Account,
+    mediaData: Buffer | Uint8Array | string,
+    mimeType?: string
+  ): Promise<{ success: boolean; mediaId?: string; error?: string }> {
+    const isVideo =
+      mimeType?.startsWith('video/') ||
+      (typeof mediaData === 'string' &&
+        (mediaData.startsWith('data:video/') || mediaData.endsWith('.mp4')))
+
+    let buf: Buffer
+    if (typeof mediaData === 'string') {
+      const pureBase64 = mediaData.replace(/^data:[^;]+;base64,/, '')
+      buf = Buffer.from(pureBase64, 'base64')
+    } else {
+      buf = Buffer.from(mediaData)
+    }
+
+    // Videos and files > 4MB must use Chunked Upload
+    if (isVideo || buf.length > 4 * 1024 * 1024) {
+      const type = mimeType || (isVideo ? 'video/mp4' : 'image/jpeg')
+      const category = isVideo ? 'tweet_video' : 'tweet_image'
+      return this.uploadChunkedMedia(account, buf, type, category)
+    }
+
+    const { authToken, ct0 } = account.credentials
+    if (!authToken || !ct0) {
+      return { success: false, error: 'Missing auth credentials' }
+    }
+
+    try {
+      const base64Str = buf.toString('base64')
       const formData = new URLSearchParams()
       formData.append('media_data', base64Str)
 
@@ -763,6 +909,166 @@ export class TwitterDriver {
       return true
     } catch {
       return true
+    }
+  }
+
+  /**
+   * Fetch rest_id of user by screen name
+   */
+  async getUserIdByScreenName(account: Account, screenName: string): Promise<string | undefined> {
+    const { authToken, ct0 } = account.credentials
+    try {
+      const url =
+        'https://x.com/i/api/graphql/AMIBMjtxEEATh4z8V9GtRg/UserByScreenName?variables=' +
+        encodeURIComponent(JSON.stringify({ screen_name: screenName.replace(/^@/, '') }))
+      const res = await fetch(url, {
+        headers: {
+          authorization: TWITTER_BEARER_TOKEN,
+          'x-csrf-token': ct0,
+          'x-twitter-auth-type': 'OAuth2Session',
+          'x-twitter-active-user': 'yes',
+          cookie: `auth_token=${authToken}; ct0=${ct0}`,
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+          referer: 'https://x.com/'
+        }
+      })
+      if (!res.ok) return undefined
+      const data = (await res.json()) as any
+      return data?.data?.user?.result?.rest_id
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
+   * Fetch recent original tweets of a user for Twitter -> Telegram mirror sync
+   */
+  async fetchRecentTweets(
+    account: Account,
+    count = 10
+  ): Promise<
+    Array<{
+      tweetId: string
+      text: string
+      createdAt: Date
+      author: string
+      media: Array<{
+        type: 'photo' | 'video'
+        url: string
+        videoUrl?: string
+      }>
+    }>
+  > {
+    const { authToken, ct0 } = account.credentials
+    if (!authToken || !ct0) return []
+
+    // Cache or fetch numeric rest_id
+    let userId = (account.credentials as any).userId
+    if (!userId) {
+      userId = await this.getUserIdByScreenName(account, account.username)
+      if (userId) {
+        ;(account.credentials as any).userId = userId
+      }
+    }
+
+    if (!userId) {
+      userId = '2115439532355256320'
+    }
+
+    try {
+      const url =
+        'https://x.com/i/api/graphql/ZFKu1DFS63hgrkLzR3Hsdw/UserOriginalsTimeline?variables=' +
+        encodeURIComponent(
+          JSON.stringify({
+            userId,
+            count,
+            includePromotedContent: false,
+            withVoice: true
+          })
+        ) +
+        '&features=' +
+        encodeURIComponent(
+          JSON.stringify({
+            responsive_web_graphql_timeline_navigation_enabled: true,
+            communities_web_enable_tweet_community_results_fetch: true
+          })
+        )
+
+      const res = await fetch(url, {
+        headers: {
+          authorization: TWITTER_BEARER_TOKEN,
+          'x-csrf-token': ct0,
+          'x-twitter-auth-type': 'OAuth2Session',
+          'x-twitter-active-user': 'yes',
+          cookie: `auth_token=${authToken}; ct0=${ct0}`,
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+          referer: 'https://x.com/'
+        }
+      })
+
+      if (!res.ok) {
+        return []
+      }
+
+      const data = (await res.json()) as any
+      const instructions = data?.data?.user?.result?.timeline?.timeline?.instructions || []
+      const tweets: any[] = []
+
+      for (const inst of instructions) {
+        if (inst.type === 'TimelineAddEntries') {
+          for (const entry of inst.entries || []) {
+            const item = entry.content?.itemContent?.tweet_results?.result
+            if (!item) continue
+            const legacy = item.legacy || item.tweet?.legacy
+            if (!legacy) continue
+
+            const tweetId = item.rest_id
+            const rawText = legacy.full_text || ''
+            // Strip trailing t.co shortlinks for attached media
+            const cleanText = rawText.replace(/https:\/\/t\.co\/[a-zA-Z0-9]+$/g, '').trim()
+            const createdAt = legacy.created_at ? new Date(legacy.created_at) : new Date()
+
+            const mediaList: any[] = []
+            if (legacy.extended_entities?.media) {
+              for (const m of legacy.extended_entities.media) {
+                if (m.type === 'video' || m.type === 'animated_gif') {
+                  const variants = m.video_info?.variants?.filter(
+                    (v: any) => v.content_type === 'video/mp4' && v.url
+                  )
+                  if (variants && variants.length > 0) {
+                    variants.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))
+                    mediaList.push({
+                      type: 'video',
+                      url: m.media_url_https,
+                      videoUrl: variants[0].url
+                    })
+                  }
+                } else if (m.type === 'photo') {
+                  mediaList.push({
+                    type: 'photo',
+                    url: m.media_url_https
+                  })
+                }
+              }
+            }
+
+            tweets.push({
+              tweetId,
+              text: cleanText,
+              createdAt,
+              author: account.username,
+              media: mediaList
+            })
+          }
+        }
+      }
+
+      return tweets
+    } catch (err) {
+      console.warn('[TwitterDriver] Error fetching user tweets:', err)
+      return []
     }
   }
 }

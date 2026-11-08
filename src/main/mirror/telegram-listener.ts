@@ -3,17 +3,25 @@ import { computeCheck } from 'telegram/Password'
 import { StringSession } from 'telegram/sessions'
 import { NewMessage } from 'telegram/events'
 import { DeletedMessage } from 'telegram/events/DeletedMessage'
+import { CustomFile } from 'telegram/client/uploads'
 import { BrowserWindow } from 'electron'
 import { appStore } from '../storage/store'
 import { twitterDriver } from '../drivers/twitter'
 import { ContentPipeline } from './pipeline'
 import { Account, MirrorLogItem, TelegramAuthCodeSubmit, TelegramAuthRequest } from '../../shared/types'
 
+export interface MediaItem {
+  buffer: Buffer
+  mimeType?: string
+}
+
 export class TelegramMirrorService {
   private client: TelegramClient | null = null
   private isRunning: boolean = false
   private authClient: TelegramClient | null = null
   private twitterCheckInterval: NodeJS.Timeout | null = null
+  private processedTwitterIds = new Set<string>()
+  private initializedTwitterSync = new Set<string>()
   private albumBuffers = new Map<
     string,
     {
@@ -26,7 +34,7 @@ export class TelegramMirrorService {
       rawTexts: string[]
       attributionSource: { username?: string; name?: string }
       messageDate: Date
-      mediaBuffers: Buffer[]
+      mediaBuffers: MediaItem[]
       timer?: NodeJS.Timeout
     }
   >()
@@ -251,12 +259,21 @@ export class TelegramMirrorService {
     }
 
     // Download media buffer if present
-    let downloadedBuf: Buffer | null = null
+    let downloadedMedia: MediaItem | null = null
     if (message.media && this.client) {
       try {
         const buf = await this.client.downloadMedia(message, {})
         if (buf && Buffer.isBuffer(buf) && buf.length > 0) {
-          downloadedBuf = buf
+          let mimeType = 'image/jpeg'
+          if (
+            message.video ||
+            message.media?.document?.mimeType?.startsWith('video/')
+          ) {
+            mimeType = message.media?.document?.mimeType || 'video/mp4'
+          } else if (message.media?.document?.mimeType) {
+            mimeType = message.media.document.mimeType
+          }
+          downloadedMedia = { buffer: buf, mimeType }
         }
       } catch (err) {
         console.warn('[Mirror] Failed to download media from Telegram:', err)
@@ -292,8 +309,8 @@ export class TelegramMirrorService {
       if (rawText.trim()) {
         album.rawTexts.push(rawText.trim())
       }
-      if (downloadedBuf) {
-        album.mediaBuffers.push(downloadedBuf)
+      if (downloadedMedia) {
+        album.mediaBuffers.push(downloadedMedia)
       }
       if (!album.attributionSource.username && !album.attributionSource.name) {
         album.attributionSource = attributionSource
@@ -315,7 +332,7 @@ export class TelegramMirrorService {
       chatTitle,
       messageIds: [message.id],
       rawText,
-      mediaBuffers: downloadedBuf ? [downloadedBuf] : [],
+      mediaBuffers: downloadedMedia ? [downloadedMedia] : [],
       attributionSource,
       messageDate
     })
@@ -357,7 +374,7 @@ export class TelegramMirrorService {
     chatTitle: string
     messageIds: number[]
     rawText: string
-    mediaBuffers: Buffer[]
+    mediaBuffers: MediaItem[]
     attributionSource: { username?: string; name?: string }
     messageDate: Date
   }): Promise<void> {
@@ -439,13 +456,13 @@ export class TelegramMirrorService {
 
       // Dispatch to Twitter/X
       if (rule.targetAccount.platform === 'twitter') {
-        // Upload all media attachments to Twitter
+        // Upload all media attachments to Twitter (images or videos)
         const mediaIds: string[] = []
         if (rule.filters.forwardMedia !== false && mediaBuffers.length > 0) {
           console.log(`[Mirror] Uploading ${mediaBuffers.length} media attachments to X...`)
-          for (const buf of mediaBuffers) {
+          for (const item of mediaBuffers) {
             try {
-              const upRes = await twitterDriver.uploadMedia(targetAccount, buf)
+              const upRes = await twitterDriver.uploadMedia(targetAccount, item.buffer, item.mimeType)
               if (upRes.success && upRes.mediaId) {
                 mediaIds.push(upRes.mediaId)
               }
@@ -588,6 +605,11 @@ export class TelegramMirrorService {
 
   private startBidirectionalDeletionChecker(): void {
     if (this.twitterCheckInterval) clearInterval(this.twitterCheckInterval)
+    // Run initial baseline check after 2s
+    setTimeout(() => {
+      this.syncTwitterToTelegram().catch((e) => console.warn('[Mirror] Initial sync error:', e))
+    }, 2000)
+
     // Check every 15 seconds
     this.twitterCheckInterval = setInterval(async () => {
       if (!this.isRunning || !this.client) return
@@ -595,6 +617,11 @@ export class TelegramMirrorService {
         await this.checkTwitterDeletions()
       } catch (err) {
         console.warn('[Mirror] Error during bidirectional deletion check:', err)
+      }
+      try {
+        await this.syncTwitterToTelegram()
+      } catch (err) {
+        console.warn('[Mirror] Error during Twitter->TG mirror sync:', err)
       }
     }, 15000)
   }
@@ -675,6 +702,147 @@ export class TelegramMirrorService {
     } catch (err) {
       console.warn(`[Mirror] Failed to delete Telegram message #${messageId}:`, err)
       return false
+    }
+  }
+
+  /**
+   * Bidirectional Mirroring: Sync new tweets posted on X back to Telegram channel
+   */
+  async syncTwitterToTelegram(): Promise<void> {
+    if (!this.client || !this.isRunning) return
+    const rules = appStore.getRules().filter((r) => r.enabled)
+    if (rules.length === 0) return
+
+    for (const rule of rules) {
+      const targetAccount = appStore.getAccount(rule.targetAccount.accountId)
+      if (!targetAccount || targetAccount.platform !== 'twitter') continue
+
+      const tweets = await twitterDriver.fetchRecentTweets(targetAccount, 10)
+      if (!tweets || tweets.length === 0) continue
+
+      // Baseline initialization on startup: cache current tweets so old historical posts aren't spammed to Telegram
+      if (!this.initializedTwitterSync.has(rule.id)) {
+        tweets.forEach((t) => this.processedTwitterIds.add(t.tweetId))
+        this.initializedTwitterSync.add(rule.id)
+        console.log(
+          `[Mirror] Initialized X->TG baseline for rule "${rule.name}" (${tweets.length} baseline tweets cached)`
+        )
+        continue
+      }
+
+      for (const tweet of tweets) {
+        if (this.processedTwitterIds.has(tweet.tweetId)) continue
+
+        // Check if this tweet was created by Rosetta (exists in mirroredPosts) to prevent echo loop
+        const allMirrored = appStore.getMirroredPosts()
+        const isEcho = allMirrored.some((p) => p.targetTweetIds?.includes(tweet.tweetId))
+        if (isEcho) {
+          this.processedTwitterIds.add(tweet.tweetId)
+          continue
+        }
+
+        console.log(`[Mirror] New tweet #${tweet.tweetId} detected on X! Mirroring to Telegram channel...`)
+        this.processedTwitterIds.add(tweet.tweetId)
+
+        // Format message: text + ID & Link footer
+        const date = tweet.createdAt || new Date()
+        const year = date.getFullYear()
+        const month = date.getMonth() + 1
+        const day = date.getDate()
+        const hours = String(date.getHours()).padStart(2, '0')
+        const mins = String(date.getMinutes()).padStart(2, '0')
+
+        const tweetUrl = `https://x.com/${tweet.author}/status/${tweet.tweetId}`
+        const attribution = `RT: ${tweetUrl} 西元${year}年${month}月${day}日 ${hours}:${mins}`
+        const tgText = tweet.text ? `${tweet.text}\n\n${attribution}` : attribution
+
+        // Download media (photos or videos)
+        const mediaFiles: CustomFile[] = []
+        if (tweet.media && tweet.media.length > 0) {
+          for (let i = 0; i < tweet.media.length; i++) {
+            const m = tweet.media[i]
+            try {
+              const downloadUrl = m.videoUrl || m.url
+              const mRes = await fetch(downloadUrl)
+              if (mRes.ok) {
+                const arrayBuf = await mRes.arrayBuffer()
+                const buf = Buffer.from(arrayBuf)
+                const ext = m.type === 'video' ? 'mp4' : 'jpg'
+                mediaFiles.push(new CustomFile(`media_${i}.${ext}`, buf.length, '', buf))
+              }
+            } catch (err) {
+              console.warn('[Mirror] Failed to download tweet media for Telegram:', err)
+            }
+          }
+        }
+
+        // Send to Telegram channel
+        try {
+          const channelIdentifier =
+            rule.sourceChannel.username || rule.sourceChannel.title || rule.sourceChannel.id || ''
+          let entity: any = channelIdentifier
+          if (/^-?\d+$/.test(channelIdentifier)) {
+            entity = await this.client.getEntity(channelIdentifier)
+          }
+
+          let sentMsg: any
+          if (mediaFiles.length > 0) {
+            sentMsg = await this.client.sendFile(entity, {
+              file: mediaFiles.length === 1 ? mediaFiles[0] : mediaFiles,
+              caption: tgText
+            })
+          } else {
+            sentMsg = await this.client.sendMessage(entity, {
+              message: tgText
+            })
+          }
+
+          const sentMsgId = Array.isArray(sentMsg) ? sentMsg[0].id : sentMsg.id
+          console.log(`[Mirror] Successfully mirrored tweet #${tweet.tweetId} to Telegram msg #${sentMsgId}`)
+
+          // Save mapping for auto-sync deletion and loop prevention
+          appStore.saveMirroredPost({
+            id: `mp_x2tg_${Date.now()}_${tweet.tweetId}`,
+            ruleId: rule.id,
+            telegramChannelId: rule.sourceChannel.id || '',
+            telegramChannelUsername: rule.sourceChannel.username,
+            telegramMessageId: sentMsgId,
+            targetPlatform: 'twitter',
+            targetAccountId: targetAccount.id,
+            targetTweetIds: [tweet.tweetId],
+            createdAt: new Date().toISOString()
+          })
+
+          const logId = `log_x2tg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+          this.emitLog({
+            id: logId,
+            timestamp: new Date().toISOString(),
+            ruleId: rule.id,
+            sourceChannel: `@${tweet.author} (X / Twitter)`,
+            targetPlatform: 'telegram',
+            originalText: tweet.text || '(X Post)',
+            processedText: tgText,
+            mediaCount: mediaFiles.length,
+            status: 'success',
+            targetUrl: tweetUrl
+          })
+        } catch (err: any) {
+          console.error('[Mirror] Failed to send tweet to Telegram channel:', err)
+          const logId = `log_x2tg_err_${Date.now()}`
+          this.emitLog({
+            id: logId,
+            timestamp: new Date().toISOString(),
+            ruleId: rule.id,
+            sourceChannel: `@${tweet.author} (X / Twitter)`,
+            targetPlatform: 'telegram',
+            originalText: tweet.text || '(X Post)',
+            processedText: '',
+            mediaCount: mediaFiles.length,
+            status: 'failed',
+            errorMessage: err.message || 'Failed to send to Telegram channel'
+          })
+        }
+      }
     }
   }
 

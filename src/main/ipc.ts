@@ -159,7 +159,7 @@ export function registerIpcHandlers(): void {
         if (payload.mediaFiles && payload.mediaFiles.length > 0) {
           for (const file of payload.mediaFiles) {
             try {
-              const uploadRes = await twitterDriver.uploadMedia(account, file.dataBase64)
+              const uploadRes = await twitterDriver.uploadMedia(account, file.dataBase64, file.type)
               if (uploadRes.success && uploadRes.mediaId) {
                 mediaIds.push(uploadRes.mediaId)
               }
