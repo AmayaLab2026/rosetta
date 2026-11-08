@@ -1,16 +1,11 @@
 import { BrowserWindow } from 'electron'
+import { ClientTransaction, fetchXDocument } from 'x-client-transaction-id'
 import { Account } from '../../shared/types'
 
 const TWITTER_BEARER_TOKEN =
   'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA'
 
-// Candidate GraphQL query IDs for CreateTweet (ordered by recency)
-const CANDIDATE_QUERY_IDS = [
-  'UecQIuYzi2MCOah7-eOpcQ',
-  'jm93VcEnLxM7My_CL9C_EA',
-  '5V_dkq1kcR8SwnPyEPuzGw',
-  'SiM_cAu83R0wnrpmKQQSEw'
-]
+const ACTIVE_QUERY_ID = 'UecQIuYzi2MCOah7-eOpcQ'
 
 export interface TwitterPublishResult {
   success: boolean
@@ -20,6 +15,33 @@ export interface TwitterPublishResult {
 }
 
 export class TwitterDriver {
+  private cachedTx: ClientTransaction | null = null
+  private cachedTxTime: number = 0
+
+  /**
+   * Acquire or reuse a ClientTransaction instance to generate x-client-transaction-id
+   */
+  private async getTransactionId(method: string, path: string): Promise<string> {
+    const now = Date.now()
+    // Refresh document transaction every 10 minutes
+    if (!this.cachedTx || now - this.cachedTxTime > 10 * 60 * 1000) {
+      try {
+        const doc = await fetchXDocument()
+        this.cachedTx = await ClientTransaction.create(doc)
+        this.cachedTxTime = now
+      } catch (err) {
+        console.warn('[TwitterDriver] Failed to fetch X document for transaction:', err)
+        // Reset so next try re-fetches
+        this.cachedTx = null
+      }
+    }
+
+    if (this.cachedTx) {
+      return this.cachedTx.generateTransactionId(method, path)
+    }
+    return ''
+  }
+
   /**
    * Verify Twitter credentials and fetch user profile
    */
@@ -59,36 +81,6 @@ export class TwitterDriver {
     } catch (err: any) {
       return { valid: false, error: err.message || 'Connection failed' }
     }
-  }
-
-  /**
-   * Fetch latest tweet ID for an account from user timeline
-   */
-  async fetchLatestTweetId(account: Account): Promise<string | undefined> {
-    try {
-      const response = await fetch(
-        `https://api.twitter.com/1.1/statuses/user_timeline.json?screen_name=${account.username}&count=1`,
-        {
-          method: 'GET',
-          headers: {
-            authorization: TWITTER_BEARER_TOKEN,
-            'x-csrf-token': account.credentials.ct0 || '',
-            cookie: `auth_token=${account.credentials.authToken}; ct0=${account.credentials.ct0}`,
-            'user-agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
-          }
-        }
-      )
-      if (response.ok) {
-        const data = await response.json()
-        if (Array.isArray(data) && data.length > 0 && data[0].id_str) {
-          return data[0].id_str
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return undefined
   }
 
   /**
@@ -254,7 +246,7 @@ export class TwitterDriver {
   }
 
   /**
-   * Post a tweet via Twitter GraphQL API with automatic fallback to headless browser
+   * Post a tweet using reverse-engineered GraphQL API with dynamic x-client-transaction-id
    */
   async postTweet(
     account: Account,
@@ -266,32 +258,17 @@ export class TwitterDriver {
       return { success: false, error: 'Missing auth_token or ct0 credentials' }
     }
 
-    // 1. Try candidate GraphQL query IDs via fast API
-    for (const queryId of CANDIDATE_QUERY_IDS) {
-      const apiResult = await this.tryApiCreateTweet(account, queryId, text, inReplyToTweetId)
-      if (apiResult.success) {
-        return apiResult
-      }
-      console.warn(`[TwitterDriver] QueryId ${queryId} response: ${apiResult.error}, checking next...`)
-    }
-
-    // 2. Fallback: Post via background headless browser window with direct tweetId extraction
-    console.log('[TwitterDriver] Fast API unavailable, using background browser automation...')
-    return this.postViaHeadless(account, text)
-  }
-
-  /**
-   * Internal attempt to call GraphQL CreateTweet
-   */
-  private async tryApiCreateTweet(
-    account: Account,
-    queryId: string,
-    text: string,
-    inReplyToTweetId?: string
-  ): Promise<TwitterPublishResult> {
-    const { authToken, ct0 } = account.credentials
     try {
-      const url = `https://x.com/i/api/graphql/${queryId}/CreateTweet`
+      const path = `/i/api/graphql/${ACTIVE_QUERY_ID}/CreateTweet`
+      const url = `https://x.com${path}`
+
+      // Generate dynamic x-client-transaction-id
+      let transactionId = ''
+      try {
+        transactionId = await this.getTransactionId('POST', path)
+      } catch (e) {
+        console.warn('[TwitterDriver] Transaction ID generation failed, attempting without:', e)
+      }
 
       const payload = {
         variables: {
@@ -325,22 +302,28 @@ export class TwitterDriver {
           longform_notetweets_inline_media_enabled: true,
           responsive_web_enhance_cards_enabled: false
         },
-        queryId
+        queryId: ACTIVE_QUERY_ID
+      }
+
+      const headers: Record<string, string> = {
+        authorization: TWITTER_BEARER_TOKEN,
+        'x-csrf-token': ct0,
+        'x-twitter-auth-type': 'OAuth2Session',
+        'x-twitter-active-user': 'yes',
+        'content-type': 'application/json',
+        cookie: `auth_token=${authToken}; ct0=${ct0}`,
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        referer: 'https://x.com/'
+      }
+
+      if (transactionId) {
+        headers['x-client-transaction-id'] = transactionId
       }
 
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          authorization: TWITTER_BEARER_TOKEN,
-          'x-csrf-token': ct0!,
-          'x-twitter-auth-type': 'OAuth2Session',
-          'x-twitter-active-user': 'yes',
-          'content-type': 'application/json',
-          cookie: `auth_token=${authToken}; ct0=${ct0}`,
-          'user-agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-          referer: 'https://x.com/'
-        },
+        headers,
         body: JSON.stringify(payload)
       })
 
@@ -349,7 +332,7 @@ export class TwitterDriver {
       }
 
       const data = (await response.json()) as any
-      if (data.errors) {
+      if (data.errors && data.errors.length > 0) {
         return { success: false, error: data.errors[0]?.message || 'GraphQL error' }
       }
 
@@ -358,23 +341,29 @@ export class TwitterDriver {
         data?.data?.create_tweet?.tweet_results?.result?.legacy
 
       const tweetId = tweetResult?.rest_id || tweetResult?.id_str
-      const tweetUrl = tweetId
-        ? `https://x.com/${account.username}/status/${tweetId}`
-        : `https://x.com/${account.username}`
+
+      if (!tweetId) {
+        // Twitter dropped the request (e.g. anti-bot dropped transactionId)
+        console.warn('[TwitterDriver] Empty tweet_results, falling back to background browser post...')
+        return this.postViaHeadless(account, text)
+      }
+
+      const directUrl = `https://x.com/${account.username}/status/${tweetId}`
+      console.log('[TwitterDriver] Tweet successfully published! URL:', directUrl)
 
       return {
         success: true,
         tweetId,
-        url: tweetUrl
+        url: directUrl
       }
     } catch (err: any) {
-      return { success: false, error: err.message || 'API request failed' }
+      console.error('[TwitterDriver] Direct API post failed, falling back to headless:', err)
+      return this.postViaHeadless(account, text)
     }
   }
 
   /**
    * Headless Fallback: Posts tweet using a background invisible Electron browser window
-   * Intercepts exact tweetId through fetch interception, DOM toast, CDP debugger, and timeline
    */
   async postViaHeadless(account: Account, text: string): Promise<TwitterPublishResult> {
     return new Promise((resolve) => {
@@ -400,17 +389,11 @@ export class TwitterDriver {
         }, 1500)
       }
 
-      const finishSuccess = async (id?: string) => {
+      const finishSuccess = (id?: string) => {
         if (resolved) return
         resolved = true
 
-        let finalId = id || detectedTweetId
-
-        // If tweetId wasn't captured directly from fetch/DOM, poll user timeline
-        if (!finalId) {
-          finalId = await this.fetchLatestTweetId(account)
-        }
-
+        const finalId = id || detectedTweetId
         const directUrl = finalId
           ? `https://x.com/${account.username}/status/${finalId}`
           : `https://x.com/${account.username}`
@@ -461,49 +444,7 @@ export class TwitterDriver {
         // ignore
       }
 
-      // 2. WebRequest network listener as secondary trigger
-      const filter = {
-        urls: [
-          '*://*.x.com/i/api/graphql/*/CreateTweet*',
-          '*://*.twitter.com/i/api/graphql/*/CreateTweet*'
-        ]
-      }
-
-      win.webContents.session.webRequest.onCompleted(filter, async (details) => {
-        if ((details.statusCode === 200 || details.statusCode === 201) && !resolved) {
-          // Allow DOM to update toast or CDP to parse body
-          setTimeout(() => finishSuccess(), 800)
-        }
-      })
-
-      // 3. Inject fetch monkey-patch before page scripts run
-      win.webContents.on('did-start-navigation', () => {
-        try {
-          win.webContents.executeJavaScript(`
-            if (!window.__ROSETTA_HOOKED__) {
-              window.__ROSETTA_HOOKED__ = true;
-              const origFetch = window.fetch;
-              window.fetch = async (...args) => {
-                const res = await origFetch(...args);
-                try {
-                  const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
-                  if (url.includes('CreateTweet')) {
-                    const clone = res.clone();
-                    clone.json().then(data => {
-                      const tid = data?.data?.create_tweet?.tweet_results?.result?.rest_id ||
-                                  data?.data?.create_tweet?.tweet_results?.result?.legacy?.id_str;
-                      if (tid) window.__LAST_CREATED_TWEET_ID__ = tid;
-                    }).catch(() => {});
-                  }
-                } catch (e) {}
-                return res;
-              };
-            }
-          `).catch(() => {})
-        } catch (e) {}
-      })
-
-      // 4. Fill text and click Tweet button
+      // 2. Fill text and click Tweet button
       win.webContents.on('did-finish-load', async () => {
         try {
           await win.webContents.executeJavaScript(`
@@ -528,9 +469,6 @@ export class TwitterDriver {
 
               // Poll for toast / status link or intercepted fetch ID in DOM
               for (let j = 0; j < 30; j++) {
-                if (window.__LAST_CREATED_TWEET_ID__) {
-                  return { tweetId: window.__LAST_CREATED_TWEET_ID__ };
-                }
                 const toastLink = document.querySelector('a[href*="/status/"]');
                 if (toastLink) {
                   const href = toastLink.getAttribute('href');

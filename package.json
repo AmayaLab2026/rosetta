@@ -15,7 +15,8 @@
     "clsx": "^2.1.1",
     "lucide-react": "^1.16.0",
     "tailwind-merge": "^3.0.0",
-    "telegram": "^2.26.16"
+    "telegram": "^2.26.16",
+    "x-client-transaction-id": "^0.3.3"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
