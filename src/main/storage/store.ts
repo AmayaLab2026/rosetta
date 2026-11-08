@@ -136,7 +136,12 @@ export class AppStore {
   }
 
   public addLog(log: MirrorLogItem): void {
-    this.data.logs.push(log)
+    const idx = this.data.logs.findIndex((l) => l.id === log.id)
+    if (idx >= 0) {
+      this.data.logs[idx] = log
+    } else {
+      this.data.logs.push(log)
+    }
     // Keep max 500 logs in memory/disk
     if (this.data.logs.length > 500) {
       this.data.logs = this.data.logs.slice(-500)

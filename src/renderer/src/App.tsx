@@ -40,15 +40,35 @@ function RosettaMain() {
     // Listen to real-time events from main process
     if (window.rosetta) {
       const unsubLog = window.rosetta.onLogAdded((newLog) => {
-        setLogs((prev) => [newLog, ...prev])
+        setLogs((prev) => {
+          const index = prev.findIndex((l) => l.id === newLog.id)
+          if (index !== -1) {
+            const copy = [...prev]
+            copy[index] = newLog
+            return copy
+          }
+          return [newLog, ...prev]
+        })
+        window.rosetta.getMirrorRules().then(setRules).catch(() => {})
       })
       const unsubStatus = window.rosetta.onStatusChanged((status) => {
         setEngineRunning(status?.running ?? status?.engineRunning ?? true)
       })
 
+      // Polling fallback to guarantee zero sync lag
+      const pollTimer = setInterval(() => {
+        window.rosetta.getLogs(150).then((lgs) => {
+          if (lgs) setLogs(lgs)
+        }).catch(() => {})
+        window.rosetta.getMirrorRules().then((rls) => {
+          if (rls) setRules(rls)
+        }).catch(() => {})
+      }, 3000)
+
       return () => {
         unsubLog()
         unsubStatus()
+        clearInterval(pollTimer)
       }
     }
     return undefined

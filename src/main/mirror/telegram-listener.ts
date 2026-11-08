@@ -409,7 +409,16 @@ export class TelegramMirrorService {
       )
     })
 
-    if (rules.length === 0) return
+    if (rules.length === 0) {
+      console.log(
+        `[Mirror] Ignored message from "${chatTitle}" (@${incomingUsername}, ID:${chatId}): no matching enabled rule found.`
+      )
+      return
+    }
+
+    console.log(
+      `[Mirror] Processing message from "${chatTitle}" for ${rules.length} matching rule(s). Media count: ${mediaBuffers.length}`
+    )
 
     for (const rule of rules) {
       const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
@@ -422,7 +431,7 @@ export class TelegramMirrorService {
           ruleId: rule.id,
           sourceChannel: chatTitle,
           targetPlatform: rule.targetAccount.platform,
-          originalText: rawText || (mediaBuffers.length > 0 ? `[全套图片 - 共 ${mediaBuffers.length} 张]` : '(Media Message)'),
+          originalText: rawText || (mediaBuffers.length > 0 ? `[全套媒体 - 共 ${mediaBuffers.length} 项]` : '(Media Message)'),
           processedText: '',
           mediaCount: 0,
           status: 'failed',
@@ -430,6 +439,19 @@ export class TelegramMirrorService {
         })
         continue
       }
+
+      // Immediately emit processing log for live UI feedback
+      this.emitLog({
+        id: logId,
+        timestamp: new Date().toISOString(),
+        ruleId: rule.id,
+        sourceChannel: chatTitle,
+        targetPlatform: rule.targetAccount.platform,
+        originalText: rawText || (mediaBuffers.length > 0 ? `[全套媒体 - 共 ${mediaBuffers.length} 项]` : '(Media Message)'),
+        processedText: '正在同步至 X / Twitter...',
+        mediaCount: mediaBuffers.length,
+        status: 'processing'
+      })
 
       // Process content through pipeline with attribution footer (RT: t.me/xxx or RT: Name 西元xxx)
       const { text: processedText, shouldDrop } = ContentPipeline.process(

@@ -153,6 +153,23 @@ export function registerIpcHandlers(): void {
         continue
       }
 
+      const logId = `log_composer_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+      const logItem: MirrorLogItem = {
+        id: logId,
+        timestamp: new Date().toISOString(),
+        ruleId: 'composer',
+        sourceChannel: '统一发帖器 (Composer)',
+        targetPlatform: target.platform,
+        originalText: payload.text || (payload.mediaFiles?.length ? `[多媒体消息 - 共 ${payload.mediaFiles.length} 项]` : '(Media Post)'),
+        processedText: '正在发布...',
+        mediaCount: payload.mediaFiles?.length || 0,
+        status: 'processing'
+      }
+
+      appStore.addLog(logItem)
+      const { BrowserWindow } = require('electron')
+      BrowserWindow.getAllWindows().forEach((win: any) => win.webContents.send('mirror:log-added', logItem))
+
       if (target.platform === 'twitter') {
         // Upload any attached media files
         const mediaIds: string[] = []
@@ -176,6 +193,14 @@ export function registerIpcHandlers(): void {
           payload.options?.splitThreadIfLong !== false
         )
         results.push({ platform: 'twitter', ...res })
+
+        // Update log with result
+        logItem.status = res.success ? 'success' : 'failed'
+        logItem.processedText = res.success ? payload.text : ''
+        logItem.errorMessage = res.error
+        logItem.targetUrl = res.url
+        appStore.addLog(logItem)
+        BrowserWindow.getAllWindows().forEach((win: any) => win.webContents.send('mirror:log-added', logItem))
       }
     }
 

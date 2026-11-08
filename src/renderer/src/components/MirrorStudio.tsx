@@ -171,10 +171,18 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
                     <span className="text-gray-300">•</span>
                     <span className="text-telegram font-semibold">{log.sourceChannel}</span>
                     <ArrowRight className="w-3 h-3 text-gray-400" />
-                    <span className="text-gray-800 font-semibold">X / Twitter</span>
+                    <span className="text-gray-800 font-semibold">
+                      {log.targetPlatform === 'telegram' ? 'Telegram' : 'X / Twitter'}
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {log.status === 'processing' && (
+                      <span className="flex items-center gap-1.5 text-[11px] font-mono text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-300 animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                        <span>同步处理中...</span>
+                      </span>
+                    )}
                     {log.status === 'success' && (
                       <span className="flex items-center gap-1 text-[11px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300">
                         <CheckCircle2 className="w-3 h-3" />
