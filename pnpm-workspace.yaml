@@ -1,3 +1,5 @@
+packages:
+  - '.'
 overrides:
   css-select: 5.1.0
 allowBuilds:
