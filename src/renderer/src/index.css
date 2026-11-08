@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    border-color: #E5E0D8;
+  }
+  body {
+    background-color: #FAF9F5;
+    color: #1F1E1D;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Custom Claude-style subtle warm scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D8D2C7;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #BFB8AC;
+}
+
+/* Pulse animation */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.97); }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s infinite ease-in-out;
+}

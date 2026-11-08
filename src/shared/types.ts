@@ -1,0 +1,133 @@
+export type PlatformType = 'telegram' | 'twitter'
+
+export interface Account {
+  id: string
+  platform: PlatformType
+  username: string
+  displayName: string
+  avatarUrl?: string
+  status: 'active' | 'expired' | 'connecting' | 'error'
+  lastChecked: string
+  credentials: {
+    // Twitter specific
+    authToken?: string
+    ct0?: string
+    cookies?: Record<string, string>
+    // Telegram specific
+    apiId?: number
+    apiHash?: string
+    sessionString?: string
+    phoneNumber?: string
+    isBot?: boolean
+    botToken?: string
+  }
+}
+
+export interface MirrorFilterConfig {
+  removeTelegramLinks: boolean // Strip t.me/xxx
+  removeOtherLinks: boolean
+  removeHashtags: boolean
+  stripAdKeywords: string[] // List of spam words to filter out
+  customReplacements: Array<{ from: string; to: string }>
+  prefix?: string
+  suffix?: string
+  autoSplitThread: boolean // Split >280 char posts into Twitter Thread
+  forwardMedia: boolean
+}
+
+export interface MirrorRule {
+  id: string
+  name: string
+  enabled: boolean
+  sourceChannel: {
+    id?: string
+    username: string // e.g. @tech_news or channel username/link
+    title?: string
+  }
+  targetAccount: {
+    platform: PlatformType
+    accountId: string
+    accountName?: string
+  }
+  filters: MirrorFilterConfig
+  stats: {
+    totalReceived: number
+    totalForwarded: number
+    lastMirroredAt?: string
+  }
+  createdAt: string
+}
+
+export interface MirrorLogItem {
+  id: string
+  timestamp: string
+  ruleId: string
+  sourceChannel: string
+  targetPlatform: PlatformType
+  originalText: string
+  processedText: string
+  mediaCount: number
+  status: 'success' | 'failed' | 'filtered' | 'processing'
+  errorMessage?: string
+  targetUrl?: string
+}
+
+export interface UnifiedPostPayload {
+  text: string
+  mediaPaths?: string[]
+  targets: Array<{
+    platform: PlatformType
+    accountId: string
+  }>
+  options?: {
+    splitThreadIfLong?: boolean
+  }
+}
+
+export interface TelegramAuthRequest {
+  apiId: number
+  apiHash: string
+  phoneNumber: string
+}
+
+export interface TelegramAuthCodeSubmit {
+  phoneNumber: string
+  phoneCodeHash: string
+  code: string
+  password?: string
+}
+
+export interface RosettaAPI {
+  // Accounts
+  getAccounts: () => Promise<Account[]>
+  saveAccount: (account: Partial<Account> & { platform: PlatformType }) => Promise<Account>
+  deleteAccount: (id: string) => Promise<boolean>
+  checkAccountHealth: (id: string) => Promise<{ status: Account['status']; error?: string }>
+  openTwitterInteractiveLogin: () => Promise<{ success: boolean; account?: Account; error?: string }>
+
+  // Telegram Auth
+  requestTelegramAuthCode: (req: TelegramAuthRequest) => Promise<{ phoneCodeHash: string }>
+  submitTelegramAuthCode: (req: TelegramAuthCodeSubmit) => Promise<Account>
+
+  // Mirror Rules
+  getMirrorRules: () => Promise<MirrorRule[]>
+  saveMirrorRule: (rule: Partial<MirrorRule>) => Promise<MirrorRule>
+  deleteMirrorRule: (id: string) => Promise<boolean>
+  toggleMirrorRule: (id: string, enabled: boolean) => Promise<boolean>
+  
+  // Mirror Engine
+  startMirrorEngine: () => Promise<boolean>
+  stopMirrorEngine: () => Promise<boolean>
+  getMirrorEngineStatus: () => Promise<{ running: boolean; activeRulesCount: number }>
+
+  // Composer
+  sendUnifiedPost: (payload: UnifiedPostPayload) => Promise<{ success: boolean; results: Array<{ platform: PlatformType; success: boolean; url?: string; error?: string }> }>
+
+  // Logs
+  getLogs: (limit?: number) => Promise<MirrorLogItem[]>
+  clearLogs: () => Promise<boolean>
+
+  // Listeners
+  onLogAdded: (callback: (log: MirrorLogItem) => void) => () => void
+  onStatusChanged: (callback: (status: { engineRunning: boolean }) => void) => () => void
+}
