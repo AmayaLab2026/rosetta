@@ -198,6 +198,15 @@ export class AppStore {
     this.data.settings = { ...this.data.settings, ...settings }
     this.persist()
   }
+
+  // --- Security & Credential Destruction ---
+  public destroyCredentials(): void {
+    this.data.accounts = []
+    this.data.settings.telegramApiId = undefined
+    this.data.settings.telegramApiHash = undefined
+    this.data.settings.telegramPhone = undefined
+    this.persist()
+  }
 }
 
 export const appStore = new AppStore()

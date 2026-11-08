@@ -39,6 +39,7 @@ const api: RosettaAPI = {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   openDataDirectory: () => ipcRenderer.invoke('app:open-data-dir'),
+  destroyCredentials: () => ipcRenderer.invoke('app:destroy-credentials'),
   getLoginItemSettings: () => ipcRenderer.invoke('settings:get-login-item'),
   setLoginItemSettings: (settings) => ipcRenderer.invoke('settings:set-login-item', settings),
 

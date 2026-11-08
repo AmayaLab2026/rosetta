@@ -8,6 +8,8 @@ import {
   Layers,
   Minimize2,
   ShieldCheck,
+  ShieldAlert,
+  KeyRound,
   Code2,
   ExternalLink,
   Info
@@ -33,6 +35,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
   const [loading, setLoading] = useState(true)
   const [saveToast, setSaveToast] = useState(false)
   const [clearingLogs, setClearingLogs] = useState(false)
+  const [destroying, setDestroying] = useState(false)
 
   const loadSettings = async () => {
     try {
@@ -96,6 +99,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
       console.error('[Settings] Clear logs failed:', e)
     } finally {
       setClearingLogs(false)
+    }
+  }
+
+  const handleDestroyCredentials = async () => {
+    const confirmed = window.confirm(
+      st.destroyConfirm ||
+        '高危操作确认：确定要彻底销毁所有已保存的账号凭证、Session 密钥及登录 Cookies 吗？\n\n此操作将立即断开 Telegram 与 X 的所有连接，清空本地保存的认证数据，操作不可撤销。'
+    )
+    if (!confirmed) return
+
+    setDestroying(true)
+    try {
+      if (window.rosetta.destroyCredentials) {
+        await window.rosetta.destroyCredentials()
+      }
+      setSettings((prev) => ({
+        ...prev,
+        telegramApiId: undefined,
+        telegramApiHash: undefined,
+        telegramPhone: undefined
+      }))
+      setSaveToast(true)
+      setTimeout(() => setSaveToast(false), 2500)
+    } catch (e) {
+      console.error('[Settings] Failed to destroy credentials:', e)
+    } finally {
+      setDestroying(false)
     }
   }
 
@@ -292,6 +322,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
                 {settings.telegramPhone || tgAccount?.displayName || '未配置'}
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Security & Credential Destruction */}
+        <section className="bg-rose-50/50 border border-rose-200/80 rounded-xl p-5 shadow-xs space-y-4">
+          <div className="border-b border-rose-200/60 pb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-rose-600" />
+              <div>
+                <h2 className="text-sm font-semibold text-rose-950">
+                  {st.destroySection || '安全与凭证销毁'}
+                </h2>
+                <p className="text-[11px] text-rose-700/80">
+                  {st.destroyDesc || '一键销毁 Telegram MTProto 凭据、手机号与 X 授权 Cookies，安全登出'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
+            <div className="text-xs text-rose-900/90 leading-relaxed max-w-lg">
+              销毁操作将清空本地密钥、移除全部关联社交账号并注销 Telegram MTProto 监听会话。
+            </div>
+
+            <button
+              onClick={handleDestroyCredentials}
+              disabled={destroying}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50 shrink-0 cursor-pointer"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              {destroying
+                ? st.destroying || '正在销毁凭证...'
+                : st.destroyBtn || '一键销毁所有凭证 (安全登出)'}
+            </button>
           </div>
         </section>
 

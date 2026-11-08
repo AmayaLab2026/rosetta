@@ -1028,7 +1028,7 @@ export class TwitterDriver {
     }
 
     if (!userId) {
-      userId = '2115439532355256320'
+      return []
     }
 
     try {

@@ -277,6 +277,38 @@ export function registerIpcHandlers(): void {
     }
   })
 
+  ipcMain.handle('app:destroy-credentials', async () => {
+    try {
+      // 1. Immediately stop Telegram listener
+      await telegramMirrorService.stop()
+
+      // 2. Clear all Electron session cookies and web storage
+      try {
+        const { session } = require('electron')
+        await session.defaultSession.clearStorageData()
+      } catch (e) {
+        console.warn('[IPC] Failed to clear session data:', e)
+      }
+
+      // 3. Wipe accounts and credentials from store
+      appStore.destroyCredentials()
+
+      // 4. Notify all renderer windows
+      const { BrowserWindow } = require('electron')
+      BrowserWindow.getAllWindows().forEach((win: any) => {
+        if (!win.isDestroyed() && win.webContents) {
+          win.webContents.send('accounts:updated')
+          win.webContents.send('mirror:status-changed', { running: false, engineRunning: false, activeRulesCount: 0 })
+        }
+      })
+
+      return true
+    } catch (e) {
+      console.error('[IPC] Failed to destroy credentials:', e)
+      return false
+    }
+  })
+
   ipcMain.handle('settings:get-login-item', () => {
     try {
       const loginSettings = app.getLoginItemSettings()

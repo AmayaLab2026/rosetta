@@ -157,6 +157,7 @@ export interface RosettaAPI {
   getSettings: () => Promise<AppSettings>
   saveSettings: (settings: Partial<AppSettings>) => Promise<boolean>
   openDataDirectory: () => Promise<boolean>
+  destroyCredentials: () => Promise<boolean>
   getLoginItemSettings: () => Promise<{ openAtLogin: boolean; openAsHidden?: boolean }>
   setLoginItemSettings: (settings: { openAtLogin: boolean; openAsHidden?: boolean }) => Promise<{ openAtLogin: boolean }>
 
