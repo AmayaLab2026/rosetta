@@ -65,9 +65,22 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
               />
             </div>
             {telegramAccount ? (
-              <div>
-                <p className="text-xs font-semibold text-foreground truncate">{telegramAccount.displayName}</p>
-                <p className="text-[11px] font-mono text-gray-500 truncate">{telegramAccount.username}</p>
+              <div className="flex items-center gap-2.5">
+                {telegramAccount.avatarUrl ? (
+                  <img
+                    src={telegramAccount.avatarUrl}
+                    alt={telegramAccount.username}
+                    className="w-8 h-8 rounded-full border border-surface-border object-cover shrink-0 shadow-2xs"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-telegram/15 text-telegram flex items-center justify-center font-bold text-xs shrink-0 border border-telegram/20">
+                    {telegramAccount.username[0]?.toUpperCase() || 'T'}
+                  </div>
+                )}
+                <div className="overflow-hidden">
+                  <p className="text-xs font-semibold text-foreground truncate">{telegramAccount.displayName}</p>
+                  <p className="text-[11px] font-mono text-gray-500 truncate">{telegramAccount.username}</p>
+                </div>
               </div>
             ) : (
               <button
@@ -106,9 +119,22 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
               />
             </div>
             {twitterAccount ? (
-              <div>
-                <p className="text-xs font-semibold text-foreground truncate">{twitterAccount.displayName}</p>
-                <p className="text-[11px] font-mono text-gray-500 truncate">@{twitterAccount.username}</p>
+              <div className="flex items-center gap-2.5">
+                {twitterAccount.avatarUrl ? (
+                  <img
+                    src={twitterAccount.avatarUrl}
+                    alt={twitterAccount.username}
+                    className="w-8 h-8 rounded-full border border-surface-border object-cover shrink-0 shadow-2xs"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-brand-subtle text-brand flex items-center justify-center font-bold text-xs shrink-0 border border-brand-border">
+                    {twitterAccount.username[0]?.toUpperCase() || 'X'}
+                  </div>
+                )}
+                <div className="overflow-hidden">
+                  <p className="text-xs font-semibold text-foreground truncate">{twitterAccount.displayName}</p>
+                  <p className="text-[11px] font-mono text-gray-500 truncate">@{twitterAccount.username}</p>
+                </div>
               </div>
             ) : (
               <button

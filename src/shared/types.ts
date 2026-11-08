@@ -128,6 +128,7 @@ export interface RosettaAPI {
   saveAccount: (account: Partial<Account> & { platform: PlatformType }) => Promise<Account>
   deleteAccount: (id: string) => Promise<boolean>
   checkAccountHealth: (id: string) => Promise<{ status: Account['status']; error?: string }>
+  refreshAccountProfile: (id: string) => Promise<Account>
   openTwitterInteractiveLogin: () => Promise<{ success: boolean; account?: Account; error?: string }>
 
   // Telegram Auth
@@ -162,4 +163,5 @@ export interface RosettaAPI {
   // Listeners
   onLogAdded: (callback: (log: MirrorLogItem) => void) => () => void
   onStatusChanged: (callback: (status: { engineRunning: boolean }) => void) => () => void
+  onAccountsUpdated: (callback: (account: Account) => void) => () => void
 }

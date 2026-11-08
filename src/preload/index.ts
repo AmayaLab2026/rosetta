@@ -7,6 +7,7 @@ const api: RosettaAPI = {
   saveAccount: (account) => ipcRenderer.invoke('accounts:save', account),
   deleteAccount: (id) => ipcRenderer.invoke('accounts:delete', id),
   checkAccountHealth: (id) => ipcRenderer.invoke('accounts:check-health', id),
+  refreshAccountProfile: (id) => ipcRenderer.invoke('accounts:refresh-profile', id),
   openTwitterInteractiveLogin: () => ipcRenderer.invoke('twitter:interactive-login'),
 
   // Telegram Auth
@@ -51,6 +52,11 @@ const api: RosettaAPI = {
     const handler = (_: any, status: any) => callback(status)
     ipcRenderer.on('mirror:status-changed', handler)
     return () => ipcRenderer.removeListener('mirror:status-changed', handler)
+  },
+  onAccountsUpdated: (callback) => {
+    const handler = (_: any, account: any) => callback(account)
+    ipcRenderer.on('accounts:updated', handler)
+    return () => ipcRenderer.removeListener('accounts:updated', handler)
   }
 }
 

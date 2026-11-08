@@ -30,6 +30,16 @@ export function registerIpcHandlers(): void {
     if (!acc) return { status: 'error', error: 'Account not found' }
 
     if (acc.platform === 'twitter') {
+      const profile = await twitterDriver.fetchUserProfile(acc)
+      if (profile.displayName || profile.avatarUrl) {
+        acc.status = 'active'
+        if (profile.displayName) acc.displayName = profile.displayName
+        if (profile.avatarUrl) acc.avatarUrl = profile.avatarUrl
+        acc.lastChecked = new Date().toISOString()
+        appStore.saveAccount(acc)
+        return { status: 'active' }
+      }
+
       const res = await twitterDriver.verifySession(
         acc.credentials.authToken || '',
         acc.credentials.ct0 || ''
@@ -47,9 +57,45 @@ export function registerIpcHandlers(): void {
         appStore.saveAccount(acc)
         return { status: 'expired', error: res.error }
       }
+    } else if (acc.platform === 'telegram') {
+      try {
+        const profile = await telegramMirrorService.fetchUserProfile(acc)
+        if (profile.displayName || profile.avatarUrl) {
+          acc.status = 'active'
+          if (profile.displayName) acc.displayName = profile.displayName
+          if (profile.avatarUrl) acc.avatarUrl = profile.avatarUrl
+          acc.lastChecked = new Date().toISOString()
+          appStore.saveAccount(acc)
+          return { status: 'active' }
+        }
+      } catch (e: any) {
+        return { status: 'error', error: e.message }
+      }
     }
 
     return { status: acc.status }
+  })
+
+  ipcMain.handle('accounts:refresh-profile', async (_, id: string) => {
+    const acc = appStore.getAccount(id)
+    if (!acc) throw new Error('Account not found')
+
+    if (acc.platform === 'twitter') {
+      const profile = await twitterDriver.fetchUserProfile(acc)
+      if (profile.displayName) acc.displayName = profile.displayName
+      if (profile.avatarUrl) acc.avatarUrl = profile.avatarUrl
+      if (profile.username) acc.username = profile.username
+      acc.lastChecked = new Date().toISOString()
+      appStore.saveAccount(acc)
+    } else if (acc.platform === 'telegram') {
+      const profile = await telegramMirrorService.fetchUserProfile(acc)
+      if (profile.displayName) acc.displayName = profile.displayName
+      if (profile.avatarUrl) acc.avatarUrl = profile.avatarUrl
+      acc.lastChecked = new Date().toISOString()
+      appStore.saveAccount(acc)
+    }
+
+    return acc
   })
 
   ipcMain.handle('twitter:interactive-login', async () => {

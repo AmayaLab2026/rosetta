@@ -121,7 +121,8 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      contextIsolation: true
+      contextIsolation: true,
+      backgroundThrottling: false
     }
   })
 
@@ -178,6 +179,27 @@ app.whenReady().then(async () => {
     }
   } catch (e) {
     console.warn('[Rosetta] Error checking auto-start:', e)
+  }
+
+  // Auto-refresh profiles & avatars for active accounts in background
+  try {
+    const twAccount = appStore.getAccounts().find((a) => a.platform === 'twitter' && a.status === 'active')
+    if (twAccount) {
+      twitterDriver.fetchUserProfile(twAccount).then((profile) => {
+        if (profile.avatarUrl || profile.displayName) {
+          if (profile.avatarUrl) twAccount.avatarUrl = profile.avatarUrl
+          if (profile.displayName) twAccount.displayName = profile.displayName
+          appStore.saveAccount(twAccount)
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed() && win.webContents) {
+              win.webContents.send('accounts:updated', twAccount)
+            }
+          })
+        }
+      }).catch((err) => console.warn('[Rosetta] Auto-fetch Twitter profile failed:', err))
+    }
+  } catch (e) {
+    console.warn('[Rosetta] Error refreshing accounts:', e)
   }
 
   app.on('activate', function () {

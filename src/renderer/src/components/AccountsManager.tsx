@@ -30,6 +30,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   const [tgLoading, setTgLoading] = useState(false)
   const [tgStep, setTgStep] = useState<'initial' | 'code'>('initial')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [refreshingId, setRefreshingId] = useState<string | null>(null)
 
   useEffect(() => {
     window.rosetta.getSettings?.().then((settings) => {
@@ -40,6 +41,17 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
       }
     }).catch(() => {})
   }, [])
+
+  // Auto-fetch avatar if missing for active accounts
+  useEffect(() => {
+    accounts.forEach((acc) => {
+      if (acc.status === 'active' && !acc.avatarUrl) {
+        window.rosetta.refreshAccountProfile?.(acc.id).then(() => {
+          onAccountUpdated()
+        }).catch(() => {})
+      }
+    })
+  }, [accounts])
 
   const twitterAccount = accounts.find((a) => a.platform === 'twitter')
   const telegramAccount = accounts.find((a) => a.platform === 'telegram')
@@ -154,8 +166,18 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   }
 
   const handleVerify = async (id: string) => {
-    await window.rosetta.checkAccountHealth(id)
-    onAccountUpdated()
+    setRefreshingId(id)
+    try {
+      if (window.rosetta.refreshAccountProfile) {
+        await window.rosetta.refreshAccountProfile(id)
+      }
+      await window.rosetta.checkAccountHealth(id)
+      onAccountUpdated()
+    } catch (e) {
+      console.warn('Verify / refresh failed:', e)
+    } finally {
+      setRefreshingId(null)
+    }
   }
 
   return (
@@ -198,10 +220,11 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleVerify(twitterAccount.id)}
-                title="Verify Session"
-                className="p-1.5 rounded-lg text-gray-600 hover:text-foreground hover:bg-surface-hover border border-surface-border"
+                title="刷新资料与头像 / Verify Session"
+                disabled={refreshingId === twitterAccount.id}
+                className="p-1.5 rounded-lg text-gray-600 hover:text-foreground hover:bg-surface-hover border border-surface-border transition-colors disabled:opacity-50"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshingId === twitterAccount.id ? 'animate-spin text-brand' : ''}`} />
               </button>
               <button
                 onClick={() => handleDelete(twitterAccount.id)}
@@ -327,21 +350,44 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
           </div>
 
           {telegramAccount && (
-            <button
-              onClick={() => handleDelete(telegramAccount.id)}
-              title="Disconnect"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 border border-surface-border"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleVerify(telegramAccount.id)}
+                title="刷新资料与头像 / Refresh Telegram Profile"
+                disabled={refreshingId === telegramAccount.id}
+                className="p-1.5 rounded-lg text-gray-600 hover:text-foreground hover:bg-surface-hover border border-surface-border transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshingId === telegramAccount.id ? 'animate-spin text-telegram' : ''}`} />
+              </button>
+              <button
+                onClick={() => handleDelete(telegramAccount.id)}
+                title="Disconnect"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 border border-surface-border"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
         </div>
 
         {telegramAccount ? (
           <div className="p-3.5 rounded-lg bg-surface-muted/50 border border-surface-border flex items-center justify-between">
-            <div className="space-y-0.5">
-              <p className="text-xs font-semibold text-foreground">{telegramAccount.displayName}</p>
-              <p className="text-[11px] font-mono text-gray-500">{telegramAccount.username}</p>
+            <div className="flex items-center gap-3">
+              {telegramAccount.avatarUrl ? (
+                <img
+                  src={telegramAccount.avatarUrl}
+                  alt={telegramAccount.username}
+                  className="w-10 h-10 rounded-full border border-surface-border object-cover shadow-xs"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-telegram/15 text-telegram flex items-center justify-center font-bold text-sm border border-telegram/20">
+                  {telegramAccount.username[0]?.toUpperCase() || 'T'}
+                </div>
+              )}
+              <div className="space-y-0.5">
+                <p className="text-xs font-semibold text-foreground">{telegramAccount.displayName}</p>
+                <p className="text-[11px] font-mono text-gray-500">{telegramAccount.username}</p>
+              </div>
             </div>
 
             <span className="text-[11px] font-mono px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 flex items-center gap-1">

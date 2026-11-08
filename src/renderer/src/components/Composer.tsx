@@ -150,7 +150,11 @@ export const Composer: React.FC<ComposerProps> = ({ accounts }) => {
                     : 'bg-surface border-surface-border text-gray-600 hover:text-foreground'
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-brand" />
+                {acc.avatarUrl ? (
+                  <img src={acc.avatarUrl} alt="" className="w-4 h-4 rounded-full object-cover shrink-0" />
+                ) : (
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand" />
+                )}
                 <span>@{acc.username}</span>
               </button>
             )

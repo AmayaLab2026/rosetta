@@ -157,6 +157,20 @@ export class TelegramMirrorService {
 
       console.log('[Mirror] Connected to Telegram as', tgAccount.username)
 
+      // Automatically fetch avatar and profile info in background
+      this.fetchUserProfile(tgAccount).then((profile) => {
+        if (profile.avatarUrl || profile.displayName) {
+          if (profile.avatarUrl) tgAccount.avatarUrl = profile.avatarUrl
+          if (profile.displayName) tgAccount.displayName = profile.displayName
+          appStore.saveAccount(tgAccount)
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed() && win.webContents) {
+              win.webContents.send('accounts:updated', tgAccount)
+            }
+          })
+        }
+      }).catch(() => {})
+
       // Register new message listener
       this.client.addEventHandler(async (event: any) => {
         try {
@@ -409,7 +423,7 @@ export class TelegramMirrorService {
 
     if (rules.length === 0) {
       console.log(
-        `[Mirror] Ignored message from "${chatTitle}" (@${incomingUsername}, ID:${chatId}): no matching enabled rule found.`
+        `[Mirror] Ignored message from "${chatTitle}" (${chatUsername || 'ID:' + chatId}): no matching enabled rule found.`
       )
       return
     }
@@ -715,17 +729,73 @@ export class TelegramMirrorService {
     }
   }
 
+  /**
+   * Fetch current Telegram user profile (displayName, avatarUrl)
+   */
+  async fetchUserProfile(account: Account): Promise<{ displayName?: string; avatarUrl?: string }> {
+    if (!this.client || !this.isRunning) {
+      if (!account.credentials.sessionString || !account.credentials.apiId || !account.credentials.apiHash) {
+        return {}
+      }
+      try {
+        const session = new StringSession(account.credentials.sessionString)
+        const tempClient = new TelegramClient(session, account.credentials.apiId, account.credentials.apiHash, {
+          connectionRetries: 3
+        })
+        await tempClient.connect()
+        const me: any = await tempClient.getMe()
+        const displayName = [me.firstName, me.lastName].filter(Boolean).join(' ') || account.displayName
+        let avatarUrl: string | undefined = undefined
+        const photo = await tempClient.downloadProfilePhoto(me, { isBig: false })
+        if (photo && Buffer.isBuffer(photo) && photo.length > 0) {
+          avatarUrl = `data:image/jpeg;base64,${photo.toString('base64')}`
+        }
+        await tempClient.disconnect().catch(() => {})
+        return { displayName, avatarUrl }
+      } catch (e) {
+        console.warn('[TelegramMirrorService] Failed to fetch profile via temp client:', e)
+        return {}
+      }
+    }
+
+    try {
+      const me: any = await this.client.getMe()
+      const displayName = [me.firstName, me.lastName].filter(Boolean).join(' ') || account.displayName
+      let avatarUrl: string | undefined = undefined
+      const photo = await this.client.downloadProfilePhoto(me, { isBig: false })
+      if (photo && Buffer.isBuffer(photo) && photo.length > 0) {
+        avatarUrl = `data:image/jpeg;base64,${photo.toString('base64')}`
+      }
+      return { displayName, avatarUrl }
+    } catch (e) {
+      console.warn('[TelegramMirrorService] Failed to fetch profile:', e)
+      return {}
+    }
+  }
+
   private emitLog(log: MirrorLogItem): void {
     appStore.addLog(log)
     BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send('mirror:log-added', log)
+      try {
+        if (!win.isDestroyed() && win.webContents) {
+          win.webContents.send('mirror:log-added', log)
+        }
+      } catch (e) {
+        // ignore
+      }
     })
   }
 
   private notifyStatusChange(): void {
     const status = this.getStatus()
     BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send('mirror:status-changed', status)
+      try {
+        if (!win.isDestroyed() && win.webContents) {
+          win.webContents.send('mirror:status-changed', status)
+        }
+      } catch (e) {
+        // ignore
+      }
     })
   }
 }

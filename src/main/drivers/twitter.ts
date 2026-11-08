@@ -942,6 +942,61 @@ export class TwitterDriver {
   }
 
   /**
+   * Fetch user's Twitter profile (displayName, avatarUrl, username)
+   */
+  async fetchUserProfile(account: Account): Promise<{ displayName?: string; avatarUrl?: string; username?: string }> {
+    const { authToken, ct0 } = account.credentials
+    if (!authToken || !ct0) return {}
+
+    try {
+      const url =
+        'https://x.com/i/api/graphql/AMIBMjtxEEATh4z8V9GtRg/UserByScreenName?variables=' +
+        encodeURIComponent(JSON.stringify({ screen_name: account.username.replace(/^@/, '') }))
+
+      const res = await fetch(url, {
+        headers: {
+          authorization: TWITTER_BEARER_TOKEN,
+          'x-csrf-token': ct0,
+          'x-twitter-auth-type': 'OAuth2Session',
+          'x-twitter-active-user': 'yes',
+          cookie: `auth_token=${authToken}; ct0=${ct0}`,
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+          referer: 'https://x.com/'
+        }
+      })
+
+      if (res.ok) {
+        const data = (await res.json()) as any
+        const userResult = data?.data?.user?.result
+        if (userResult) {
+          const displayName = userResult?.core?.name || userResult?.legacy?.name
+          let avatarUrl = userResult?.avatar?.image_url || userResult?.legacy?.profile_image_url_https
+          if (avatarUrl) {
+            avatarUrl = avatarUrl.replace('_normal.', '_bigger.')
+          }
+          const username = userResult?.core?.screen_name || userResult?.legacy?.screen_name || account.username
+
+          return { displayName, avatarUrl, username }
+        }
+      }
+
+      // Fallback to legacy verifySession
+      const legacyRes = await this.verifySession(authToken, ct0)
+      if (legacyRes.valid && legacyRes.user) {
+        return {
+          displayName: legacyRes.user.name,
+          avatarUrl: legacyRes.user.avatarUrl ? legacyRes.user.avatarUrl.replace('_normal.', '_bigger.') : undefined,
+          username: legacyRes.user.username
+        }
+      }
+    } catch (err) {
+      console.warn('[TwitterDriver] Failed to fetch user profile:', err)
+    }
+    return {}
+  }
+
+  /**
    * Fetch recent original tweets of a user for Twitter -> Telegram mirror sync
    */
   async fetchRecentTweets(

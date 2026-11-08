@@ -55,6 +55,25 @@ function RosettaMain() {
       const unsubStatus = window.rosetta.onStatusChanged((status) => {
         setEngineRunning(status?.running ?? status?.engineRunning ?? true)
       })
+      const unsubAccounts = window.rosetta.onAccountsUpdated?.((updatedAcc) => {
+        setAccounts((prev) => {
+          const idx = prev.findIndex((a) => a.id === updatedAcc.id)
+          if (idx !== -1) {
+            const copy = [...prev]
+            copy[idx] = updatedAcc
+            return copy
+          }
+          return [...prev, updatedAcc]
+        })
+      })
+
+      // Auto-reload on window focus / visibility change
+      const handleFocus = () => loadAll()
+      const handleVisibility = () => {
+        if (!document.hidden) loadAll()
+      }
+      window.addEventListener('focus', handleFocus)
+      document.addEventListener('visibilitychange', handleVisibility)
 
       // Polling fallback to guarantee zero sync lag
       const pollTimer = setInterval(() => {
@@ -64,11 +83,14 @@ function RosettaMain() {
         window.rosetta.getMirrorRules().then((rls) => {
           if (rls) setRules(rls)
         }).catch(() => {})
-      }, 3000)
+      }, 1500)
 
       return () => {
         unsubLog()
         unsubStatus()
+        unsubAccounts?.()
+        window.removeEventListener('focus', handleFocus)
+        document.removeEventListener('visibilitychange', handleVisibility)
         clearInterval(pollTimer)
       }
     }
