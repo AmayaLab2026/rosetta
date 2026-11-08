@@ -6,7 +6,7 @@ const TWITTER_BEARER_TOKEN =
 
 // Candidate GraphQL query IDs for CreateTweet (ordered by recency)
 const CANDIDATE_QUERY_IDS = [
-  'UecQIuYzi2MCOah7-eOpcQ', // Latest active query ID
+  'UecQIuYzi2MCOah7-eOpcQ',
   'jm93VcEnLxM7My_CL9C_EA',
   '5V_dkq1kcR8SwnPyEPuzGw',
   'SiM_cAu83R0wnrpmKQQSEw'
@@ -59,6 +59,36 @@ export class TwitterDriver {
     } catch (err: any) {
       return { valid: false, error: err.message || 'Connection failed' }
     }
+  }
+
+  /**
+   * Fetch latest tweet ID for an account from user timeline
+   */
+  async fetchLatestTweetId(account: Account): Promise<string | undefined> {
+    try {
+      const response = await fetch(
+        `https://api.twitter.com/1.1/statuses/user_timeline.json?screen_name=${account.username}&count=1`,
+        {
+          method: 'GET',
+          headers: {
+            authorization: TWITTER_BEARER_TOKEN,
+            'x-csrf-token': account.credentials.ct0 || '',
+            cookie: `auth_token=${account.credentials.authToken}; ct0=${account.credentials.ct0}`,
+            'user-agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+          }
+        }
+      )
+      if (response.ok) {
+        const data = await response.json()
+        if (Array.isArray(data) && data.length > 0 && data[0].id_str) {
+          return data[0].id_str
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return undefined
   }
 
   /**
@@ -236,21 +266,17 @@ export class TwitterDriver {
       return { success: false, error: 'Missing auth_token or ct0 credentials' }
     }
 
-    // Try API candidate query IDs
+    // 1. Try candidate GraphQL query IDs via fast API
     for (const queryId of CANDIDATE_QUERY_IDS) {
       const apiResult = await this.tryApiCreateTweet(account, queryId, text, inReplyToTweetId)
       if (apiResult.success) {
         return apiResult
       }
-      // If error is NOT 404, it might be an auth error, so return directly
-      if (apiResult.error && !apiResult.error.includes('404')) {
-        // If not a 404 (endpoint not found), try headless directly
-        console.warn(`[TwitterDriver] QueryId ${queryId} failed with ${apiResult.error}, trying next...`)
-      }
+      console.warn(`[TwitterDriver] QueryId ${queryId} response: ${apiResult.error}, checking next...`)
     }
 
-    // Fallback: Post via background headless browser window
-    console.log('[TwitterDriver] API endpoints failed, falling back to background browser automation...')
+    // 2. Fallback: Post via background headless browser window with direct tweetId extraction
+    console.log('[TwitterDriver] Fast API unavailable, using background browser automation...')
     return this.postViaHeadless(account, text)
   }
 
@@ -348,6 +374,7 @@ export class TwitterDriver {
 
   /**
    * Headless Fallback: Posts tweet using a background invisible Electron browser window
+   * Intercepts exact tweetId through fetch interception, DOM toast, CDP debugger, and timeline
    */
   async postViaHeadless(account: Account, text: string): Promise<TwitterPublishResult> {
     return new Promise((resolve) => {
@@ -362,6 +389,7 @@ export class TwitterDriver {
       })
 
       let resolved = false
+      let detectedTweetId: string | undefined = undefined
 
       const cleanup = () => {
         clearTimeout(timer)
@@ -372,6 +400,29 @@ export class TwitterDriver {
         }, 1500)
       }
 
+      const finishSuccess = async (id?: string) => {
+        if (resolved) return
+        resolved = true
+
+        let finalId = id || detectedTweetId
+
+        // If tweetId wasn't captured directly from fetch/DOM, poll user timeline
+        if (!finalId) {
+          finalId = await this.fetchLatestTweetId(account)
+        }
+
+        const directUrl = finalId
+          ? `https://x.com/${account.username}/status/${finalId}`
+          : `https://x.com/${account.username}`
+
+        cleanup()
+        resolve({
+          success: true,
+          tweetId: finalId,
+          url: directUrl
+        })
+      }
+
       const timer = setTimeout(() => {
         if (!resolved) {
           resolved = true
@@ -380,7 +431,37 @@ export class TwitterDriver {
         }
       }, 30000)
 
-      // Listen for the CreateTweet network response
+      // 1. CDP Debugger interception of response body
+      try {
+        win.webContents.debugger.attach('1.3')
+        win.webContents.debugger.sendCommand('Network.enable')
+        win.webContents.debugger.on('message', async (_event, method, params) => {
+          if (method === 'Network.responseReceived') {
+            const url = params?.response?.url || ''
+            if (url.includes('CreateTweet') && params?.response?.status === 200) {
+              try {
+                const bodyObj = await win.webContents.debugger.sendCommand('Network.getResponseBody', {
+                  requestId: params.requestId
+                })
+                const json = JSON.parse(bodyObj.body)
+                const tid =
+                  json?.data?.create_tweet?.tweet_results?.result?.rest_id ||
+                  json?.data?.create_tweet?.tweet_results?.result?.legacy?.id_str
+                if (tid) {
+                  detectedTweetId = tid
+                  finishSuccess(tid)
+                }
+              } catch (e) {
+                // ignore
+              }
+            }
+          }
+        })
+      } catch (e) {
+        // ignore
+      }
+
+      // 2. WebRequest network listener as secondary trigger
       const filter = {
         urls: [
           '*://*.x.com/i/api/graphql/*/CreateTweet*',
@@ -388,17 +469,41 @@ export class TwitterDriver {
         ]
       }
 
-      win.webContents.session.webRequest.onCompleted(filter, (details) => {
+      win.webContents.session.webRequest.onCompleted(filter, async (details) => {
         if ((details.statusCode === 200 || details.statusCode === 201) && !resolved) {
-          resolved = true
-          cleanup()
-          resolve({
-            success: true,
-            url: `https://x.com/${account.username}`
-          })
+          // Allow DOM to update toast or CDP to parse body
+          setTimeout(() => finishSuccess(), 800)
         }
       })
 
+      // 3. Inject fetch monkey-patch before page scripts run
+      win.webContents.on('did-start-navigation', () => {
+        try {
+          win.webContents.executeJavaScript(`
+            if (!window.__ROSETTA_HOOKED__) {
+              window.__ROSETTA_HOOKED__ = true;
+              const origFetch = window.fetch;
+              window.fetch = async (...args) => {
+                const res = await origFetch(...args);
+                try {
+                  const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+                  if (url.includes('CreateTweet')) {
+                    const clone = res.clone();
+                    clone.json().then(data => {
+                      const tid = data?.data?.create_tweet?.tweet_results?.result?.rest_id ||
+                                  data?.data?.create_tweet?.tweet_results?.result?.legacy?.id_str;
+                      if (tid) window.__LAST_CREATED_TWEET_ID__ = tid;
+                    }).catch(() => {});
+                  }
+                } catch (e) {}
+                return res;
+              };
+            }
+          `).catch(() => {})
+        } catch (e) {}
+      })
+
+      // 4. Fill text and click Tweet button
       win.webContents.on('did-finish-load', async () => {
         try {
           await win.webContents.executeJavaScript(`
@@ -415,14 +520,33 @@ export class TwitterDriver {
                               document.querySelector('[data-testid="tweetButtonInline"]');
                   if (btn && !btn.hasAttribute('disabled') && btn.getAttribute('aria-disabled') !== 'true') {
                     btn.click();
-                    return true;
+                    break;
                   }
                 }
                 await sleep(300);
               }
-              return false;
+
+              // Poll for toast / status link or intercepted fetch ID in DOM
+              for (let j = 0; j < 30; j++) {
+                if (window.__LAST_CREATED_TWEET_ID__) {
+                  return { tweetId: window.__LAST_CREATED_TWEET_ID__ };
+                }
+                const toastLink = document.querySelector('a[href*="/status/"]');
+                if (toastLink) {
+                  const href = toastLink.getAttribute('href');
+                  const m = href.match(/status\\/(\\d+)/);
+                  if (m) return { tweetId: m[1] };
+                }
+                await sleep(200);
+              }
+              return null;
             })()
-          `)
+          `).then((domRes: any) => {
+            if (domRes?.tweetId) {
+              detectedTweetId = domRes.tweetId
+              finishSuccess(domRes.tweetId)
+            }
+          }).catch(() => {})
         } catch (e) {
           // ignore
         }
