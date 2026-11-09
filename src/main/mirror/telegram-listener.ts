@@ -1,7 +1,6 @@
 import { TelegramClient, Api } from 'telegram'
 import { StringSession } from 'telegram/sessions'
 import { NewMessage } from 'telegram/events'
-import { DeletedMessage } from 'telegram/events/DeletedMessage'
 import { CustomFile } from 'telegram/client/uploads'
 import { BrowserWindow } from 'electron'
 import { appStore } from '../storage/store'
@@ -128,14 +127,6 @@ export class TelegramMirrorService {
         }
       }, new NewMessage({}))
 
-      // Register deleted message listener (Decoupled mapping cleanup)
-      this.client.addEventHandler(async (event: any) => {
-        try {
-          await this.handleDeletedMessages(event)
-        } catch (err) {
-          console.error('[Mirror] Error handling deleted messages:', err)
-        }
-      }, new DeletedMessage({}))
 
       this.notifyStatusChange()
       return true
@@ -532,7 +523,7 @@ export class TelegramMirrorService {
             rule.stats.totalForwarded += 1
             rule.stats.lastMirroredAt = new Date().toISOString()
 
-            // Track mapping for all message IDs in the album for automatic synchronized deletion
+            // Track mapping for all message IDs in the album for forwarded tweet history
             const targetTweetIds =
               publishRes.tweetIds || (publishRes.tweetId ? [publishRes.tweetId] : [])
             if (targetTweetIds.length > 0) {
@@ -591,60 +582,6 @@ export class TelegramMirrorService {
           })
         }
       }
-    }
-  }
-
-  /**
-   * Handle deleted messages from Telegram channels.
-   * Completely decoupled: Telegram deletion will NOT cascade delete tweets on Twitter.
-   * Only cleans up local tracking records to prevent phantom references.
-   */
-  private async handleDeletedMessages(event: any): Promise<void> {
-    const deletedIds: number[] = event.deletedIds || (event.id ? [event.id] : [])
-    if (!deletedIds || deletedIds.length === 0) return
-
-    let channelId = ''
-    if (event.peer?.channelId) {
-      channelId = event.peer.channelId.toString()
-    } else if (event.chatId) {
-      channelId = event.chatId.toString()
-    }
-
-    console.log(
-      `[Mirror] Telegram delete event detected for IDs: [${deletedIds.join(', ')}] in channel: ${
-        channelId || 'all'
-      } (Decoupled: no Twitter cascading deletion)`
-    )
-
-    for (const msgId of deletedIds) {
-      let matchedRecords = channelId
-        ? appStore.findMirroredPostsByTelegram(channelId, msgId)
-        : []
-      if (matchedRecords.length === 0) {
-        matchedRecords = appStore.findMirroredPostsByMessageId(msgId)
-      }
-      for (const record of matchedRecords) {
-        appStore.deleteMirroredPost(record.id)
-      }
-    }
-  }
-
-  /**
-   * Delete a message in a Telegram channel (for bidirectional deletion)
-   */
-  async deleteTelegramMessage(channelIdentifier: string, messageId: number): Promise<boolean> {
-    if (!this.client || !this.isRunning) return false
-    try {
-      let entity: any = channelIdentifier
-      if (/^-?\d+$/.test(channelIdentifier)) {
-        entity = await this.client.getEntity(channelIdentifier)
-      }
-      await this.client.deleteMessages(entity, [messageId], { revoke: true })
-      console.log(`[Mirror] Successfully deleted Telegram message #${messageId} in ${channelIdentifier}`)
-      return true
-    } catch (err) {
-      console.warn(`[Mirror] Failed to delete Telegram message #${messageId}:`, err)
-      return false
     }
   }
 

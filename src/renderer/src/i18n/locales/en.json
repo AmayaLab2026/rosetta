@@ -179,7 +179,6 @@
     "stripAllLinks": "Strip all links",
     "stripHashtags": "Strip hashtags",
     "autoThread": "Auto split into Thread (>280 chars)",
-    "autoSyncDeletion": "Auto sync deletion when source is deleted",
     "attributionFormatLabel": "Forward & source attribution format",
     "cancel": "Cancel",
     "saveRule": "Save Rule",
@@ -191,7 +190,6 @@
     "mirroredCount": "Mirrored",
     "noTgLinksBadge": "No TG Links",
     "autoThreadBadge": "Thread Chain",
-    "autoSyncDeletionBadge": "Sync Deletion",
     "adFiltersBadge": "Ad keywords",
     "noRules": "No Mirror Rules",
     "noRulesDesc": "Click 'New Mirror Rule' to begin listening to Telegram channels and forwarding to X."

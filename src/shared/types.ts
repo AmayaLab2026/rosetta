@@ -33,7 +33,6 @@ export interface MirrorFilterConfig {
   suffix?: string
   autoSplitThread: boolean // Split >280 char posts into Twitter Thread
   forwardMedia: boolean
-  autoSyncDeletion?: boolean // Sync deletion when source Telegram message is deleted
   attributionStyle?: 'RT' | 'from' | 'none' // 'RT': RT:@channel 西元..., 'from': 来自:@channel 西元..., 'none'
 }
 

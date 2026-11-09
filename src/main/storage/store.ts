@@ -190,7 +190,7 @@ export class AppStore {
     this.persist(true)
   }
 
-  // --- Mirrored Posts Mapping (for Auto-Delete) ---
+  // --- Mirrored Posts Tracking ---
   public getMirroredPosts(): MirroredPostRecord[] {
     return this.data.mirroredPosts || []
   }
@@ -202,28 +202,6 @@ export class AppStore {
     if (this.data.mirroredPosts.length > 3000) {
       this.data.mirroredPosts = this.data.mirroredPosts.slice(-3000)
     }
-    this.persist()
-  }
-
-  public findMirroredPostsByTelegram(channelId: string, messageId: number): MirroredPostRecord[] {
-    if (!this.data.mirroredPosts) return []
-    const normChannelId = channelId.replace(/^-100/, '').replace(/^@/, '').toLowerCase()
-    return this.data.mirroredPosts.filter((m) => {
-      const storedChannel = (m.telegramChannelId || '').replace(/^-100/, '').replace(/^@/, '').toLowerCase()
-      const storedUsername = (m.telegramChannelUsername || '').replace(/^@/, '').toLowerCase()
-      const channelMatches = !channelId || storedChannel === normChannelId || storedUsername === normChannelId
-      return channelMatches && m.telegramMessageId === messageId
-    })
-  }
-
-  public findMirroredPostsByMessageId(messageId: number): MirroredPostRecord[] {
-    if (!this.data.mirroredPosts) return []
-    return this.data.mirroredPosts.filter((m) => m.telegramMessageId === messageId)
-  }
-
-  public deleteMirroredPost(id: string): void {
-    if (!this.data.mirroredPosts) return
-    this.data.mirroredPosts = this.data.mirroredPosts.filter((m) => m.id !== id)
     this.persist()
   }
 

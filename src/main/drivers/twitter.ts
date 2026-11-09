@@ -911,33 +911,6 @@ export class TwitterDriver {
   }
 
   /**
-   * Delete multiple tweets (e.g. all tweets in a mirrored thread)
-   */
-  async deleteThread(
-    account: Account,
-    tweetIds: string[]
-  ): Promise<{ success: boolean; deletedCount: number; errors: string[] }> {
-    let deletedCount = 0
-    const errors: string[] = []
-
-    for (const tid of tweetIds) {
-      const res = await this.deleteTweet(account, tid)
-      if (res.success) {
-        deletedCount++
-      } else if (res.error) {
-        errors.push(`Tweet ${tid}: ${res.error}`)
-      }
-      await new Promise((r) => setTimeout(r, 600))
-    }
-
-    return {
-      success: errors.length === 0,
-      deletedCount,
-      errors
-    }
-  }
-
-  /**
    * Fetch recent N tweets for the authenticated user (for deletion studio)
    */
   async fetchRecentTweetsForDeletion(
@@ -1022,27 +995,6 @@ export class TwitterDriver {
       text: `推文 #${tid}`,
       url: `https://x.com/${account.username}/status/${tid}`
     }))
-  }
-
-  /**
-   * Check if a tweet exists on Twitter (returns false if 404/deleted)
-   */
-  async checkTweetExists(account: Account, tweetId: string): Promise<boolean> {
-    try {
-      const res = await fetch(`https://x.com/${account.username}/status/${tweetId}`, {
-        method: 'HEAD',
-        headers: {
-          'user-agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
-        }
-      })
-      if (res.status === 404) {
-        return false
-      }
-      return true
-    } catch {
-      return true
-    }
   }
 
   /**

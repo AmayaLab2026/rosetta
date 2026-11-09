@@ -33,8 +33,6 @@
   - 推特单条推文优先支持发满 6 张图片；若受账号策略限制或图片超额，自适应将剩余图片通过回复线程 (Thread) 无损链式串联。
 - **全局原生视频支持 (Full Video & Chunked Upload)**
   - Telegram 视频消息自动提取；推特端采用完整的 Chunked Media Upload (INIT -> APPEND -> FINALIZE -> STATUS 轮询) 协议，支持大体积高清 MP4/WebM 视频分片转码发布。
-- **智能联动同步撤回 (Synchronized Deletion)**
-  - 电报频道中撤回或删除任意消息，X / Twitter 对应的单推或长推推文串将即刻被自动联动删除，保持全网信息一致。
 - **原生出处署名 (Smart Attribution Footers)**
   - 转发消息自动解析原作者或源频道：
     - 公开频道/用户：`RT: t.me/<username> 西元YYYY年M月D日 HH:mm`

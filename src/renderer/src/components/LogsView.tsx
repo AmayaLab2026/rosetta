@@ -86,7 +86,7 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
             { id: 'processing', label: t.logs.filterProcessing, count: countProcessing },
             { id: 'success', label: t.logs.filterSuccess, count: countSuccess },
             { id: 'filtered', label: t.logs.filterFiltered, count: countFiltered },
-            { id: 'deleted', label: t.logs.filterDeleted, count: countDeleted },
+            ...(countDeleted > 0 ? [{ id: 'deleted', label: t.logs.filterDeleted, count: countDeleted }] : []),
             { id: 'failed', label: t.logs.filterFailed, count: countFailed }
           ].map((item) => {
             const isSelected = filterStatus === item.id

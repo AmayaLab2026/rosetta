@@ -26,7 +26,6 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
   const [prefix, setPrefix] = useState('')
   const [suffix, setSuffix] = useState('')
   const [autoSplitThread, setAutoSplitThread] = useState(true)
-  const [autoSyncDeletion, setAutoSyncDeletion] = useState(true)
   const [attributionStyle, setAttributionStyle] = useState<'RT' | 'from' | 'none'>('RT')
 
   const twitterAccounts = accounts.filter((a) => a.platform === 'twitter' && a.status === 'active')
@@ -73,7 +72,6 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
         prefix: prefix.trim() || undefined,
         suffix: suffix.trim() || undefined,
         autoSplitThread,
-        autoSyncDeletion,
         attributionStyle,
         forwardMedia: true
       },
@@ -242,16 +240,6 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
               />
               <span>{t.rules.autoThread}</span>
             </label>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoSyncDeletion}
-                onChange={(e) => setAutoSyncDeletion(e.target.checked)}
-                className="rounded border-surface-border text-brand focus:ring-brand"
-              />
-              <span className="text-brand font-medium">{t.rules.autoSyncDeletion}</span>
-            </label>
           </div>
 
           <div className="pt-1">
@@ -382,11 +370,6 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
                 {rule.filters.autoSplitThread && (
                   <span className="bg-surface-muted px-1.5 py-0.5 rounded border border-surface-border text-gray-600">
                     {t.rules.autoThreadBadge}
-                  </span>
-                )}
-                {rule.filters.autoSyncDeletion !== false && (
-                  <span className="bg-brand-subtle px-1.5 py-0.5 rounded border border-brand-border text-brand font-medium">
-                    {t.rules.autoSyncDeletionBadge}
                   </span>
                 )}
                 {rule.filters.attributionStyle !== 'none' && (
