@@ -142,10 +142,8 @@ function RosettaMain() {
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground select-none font-sans">
       <Header
-        engineRunning={engineRunning}
         activeRulesCount={activeRulesCount}
         activeAccountsCount={activeAccountsCount}
-        onToggleEngine={handleToggleEngine}
       />
 
       <div className="flex flex-1 overflow-hidden">

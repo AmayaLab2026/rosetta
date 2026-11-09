@@ -392,8 +392,8 @@ export class TwitterDriver {
       buf = Buffer.from(mediaData)
     }
 
-    // Videos and files > 4MB must use Chunked Upload
-    if (isVideo || buf.length > 4 * 1024 * 1024) {
+    // Videos and files > 1MB use robust Chunked Upload
+    if (isVideo || buf.length > 1024 * 1024) {
       const type = mimeType || (isVideo ? 'video/mp4' : 'image/jpeg')
       const category = isVideo ? 'tweet_video' : 'tweet_image'
       return this.uploadChunkedMedia(account, buf, type, category)
@@ -425,20 +425,21 @@ export class TwitterDriver {
       })
 
       if (!response.ok) {
-        const errText = await response.text()
-        return { success: false, error: `Upload HTTP ${response.status}: ${errText.slice(0, 100)}` }
+        console.warn(`[TwitterDriver] Simple upload HTTP ${response.status}, falling back to chunked upload...`)
+        return this.uploadChunkedMedia(account, buf, mimeType || 'image/jpeg', 'tweet_image')
       }
 
       const data = (await response.json()) as any
       const mediaId = data.media_id_string || (data.media_id ? String(data.media_id) : undefined)
       if (!mediaId) {
-        return { success: false, error: 'Failed to retrieve media_id from Twitter' }
+        return this.uploadChunkedMedia(account, buf, mimeType || 'image/jpeg', 'tweet_image')
       }
 
       console.log(`[TwitterDriver] Uploaded image successfully, mediaId: ${mediaId}`)
       return { success: true, mediaId, isVideo: false }
     } catch (err: any) {
-      return { success: false, error: err.message || 'Media upload failed' }
+      console.warn('[TwitterDriver] Simple upload exception, falling back to chunked upload:', err)
+      return this.uploadChunkedMedia(account, buf, mimeType || 'image/jpeg', 'tweet_image')
     }
   }
 

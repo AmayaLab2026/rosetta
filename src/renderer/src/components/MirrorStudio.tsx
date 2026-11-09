@@ -90,6 +90,7 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
                   <img
                     src={telegramAccount.avatarUrl}
                     alt={telegramAccount.username}
+                    onError={(e) => { e.currentTarget.style.display = 'none' }}
                     className="w-9 h-9 rounded-full border border-surface-border object-cover shrink-0 shadow-2xs"
                   />
                 ) : (
@@ -144,6 +145,7 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
                   <img
                     src={twitterAccount.avatarUrl}
                     alt={twitterAccount.username}
+                    onError={(e) => { e.currentTarget.style.display = 'none' }}
                     className="w-9 h-9 rounded-full border border-surface-border object-cover shrink-0 shadow-2xs"
                   />
                 ) : (

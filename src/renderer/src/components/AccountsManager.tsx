@@ -244,6 +244,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 <img
                   src={twitterAccount.avatarUrl}
                   alt={twitterAccount.username}
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
                   className="w-10 h-10 rounded-full border border-surface-border object-cover shadow-2xs"
                 />
               ) : (
@@ -377,6 +378,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 <img
                   src={telegramAccount.avatarUrl}
                   alt={telegramAccount.username}
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
                   className="w-10 h-10 rounded-full border border-surface-border object-cover shadow-2xs"
                 />
               ) : (

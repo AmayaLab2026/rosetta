@@ -60,6 +60,22 @@ export class TelegramBotDriver {
       let sentMessageId: number | undefined
       let mediaType: 'none' | 'photo' | 'video' | 'album' = 'none'
 
+      const formatTelegramError = (errDesc: string) => {
+        let errMsg = errDesc || 'Telegram Bot API 响应失败'
+        if (errMsg.includes('chat not found')) {
+          errMsg = `未找到目标频道/群组 "${cleanChatId}"，请确认频道用户名是否正确（如 @channel_name 或 -100...），或先将机器人添加进该频道。`
+        } else if (errMsg.includes('bot is not a member') || errMsg.includes('need administrator') || errMsg.includes('CHAT_ADMIN_REQUIRED')) {
+          errMsg = `机器人不是频道 "${cleanChatId}" 的管理员，请在频道管理设置中将机器人设为管理员并赋予发帖与删帖权限。`
+        } else if (errMsg.includes('Unauthorized')) {
+          errMsg = 'Bot Token 无效或未授权，请核对来自 @BotFather 的 Token。'
+        } else if (errMsg.includes('caption is too long')) {
+          errMsg = '图文说明文本超过了 Telegram 1024 字符限制。'
+        }
+        return errMsg
+      }
+
+      const safeCaption = cleanText.length > 1024 ? cleanText.substring(0, 1020) + '...' : cleanText
+
       if (!hasMedia) {
         // Plain text message
         const res = await fetch(`${baseUrl}/sendMessage`, {
@@ -87,7 +103,7 @@ export class TelegramBotDriver {
         }
 
         if (!data.ok) {
-          return { success: false, error: data.description || 'Bot API sendMessage failed' }
+          return { success: false, error: formatTelegramError(data.description) }
         }
         sentMessageId = data.result?.message_id
       } else if (mediaFiles.length === 1) {
@@ -102,10 +118,10 @@ export class TelegramBotDriver {
 
         const form = new FormData()
         form.append('chat_id', cleanChatId)
-        if (cleanText) form.append('caption', cleanText)
+        if (safeCaption) form.append('caption', safeCaption)
         form.append(
           fieldName,
-          new Blob([buffer], { type: file.type }),
+          new Blob([buffer], { type: file.type || (isVideo ? 'video/mp4' : 'image/jpeg') }),
           file.name || (isVideo ? 'video.mp4' : 'image.jpg')
         )
 
@@ -115,7 +131,7 @@ export class TelegramBotDriver {
         })
         const data = (await res.json()) as any
         if (!data.ok) {
-          return { success: false, error: data.description || `Bot API ${endpoint} failed` }
+          return { success: false, error: formatTelegramError(data.description) }
         }
         sentMessageId = data.result?.message_id
       } else {
@@ -136,12 +152,12 @@ export class TelegramBotDriver {
           mediaMetadata.push({
             type: isVideo ? 'video' : 'photo',
             media: `attach://${attachName}`,
-            caption: i === 0 && cleanText ? cleanText : undefined
+            caption: i === 0 && safeCaption ? safeCaption : undefined
           })
 
           form.append(
             attachName,
-            new Blob([buffer], { type: file.type }),
+            new Blob([buffer], { type: file.type || (isVideo ? 'video/mp4' : 'image/jpeg') }),
             file.name || (isVideo ? `video_${i}.mp4` : `image_${i}.jpg`)
           )
         }
@@ -154,7 +170,7 @@ export class TelegramBotDriver {
         })
         const data = (await res.json()) as any
         if (!data.ok) {
-          return { success: false, error: data.description || 'Bot API sendMediaGroup failed' }
+          return { success: false, error: formatTelegramError(data.description) }
         }
         const results = Array.isArray(data.result) ? data.result : [data.result]
         sentMessageId = results[0]?.message_id

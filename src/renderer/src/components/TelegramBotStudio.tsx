@@ -17,11 +17,8 @@ import {
   Hash,
   HelpCircle,
   ArrowRight,
-  Sparkles,
   ChevronDown,
   ChevronUp,
-  X,
-  UploadCloud,
   Eye,
   EyeOff
 } from 'lucide-react'
@@ -44,15 +41,6 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
   const [botProfile, setBotProfile] = useState<{ botName?: string; username?: string } | null>(null)
   const [verifyError, setVerifyError] = useState<string | null>(null)
   const [savedToast, setSavedToast] = useState(false)
-
-  // Bot Post Composer Form State
-  const [postText, setPostText] = useState('')
-  const [targetChatId, setTargetChatId] = useState('')
-  const [mediaFiles, setMediaFiles] = useState<Array<{ dataBase64: string; name: string; type: string }>>([])
-  const [isSending, setIsSending] = useState(false)
-  const [isDragging, setIsDragging] = useState(false)
-  const [sendResult, setSendResult] = useState<{ type: 'success' | 'error'; text: string; url?: string; messageId?: number } | null>(null)
-  const [copiedLink, setCopiedLink] = useState(false)
 
   // Posts history & management
   const [posts, setPosts] = useState<TelegramBotPostItem[]>([])
@@ -83,7 +71,6 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
         }
         if (st.defaultBotChatId) {
           setChatId(st.defaultBotChatId)
-          setTargetChatId(st.defaultBotChatId)
           setManualChatId(st.defaultBotChatId)
         }
       }
@@ -132,102 +119,6 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
       setVerifyError(err.message || 'Token 验证失败')
     } finally {
       setIsVerifying(false)
-    }
-  }
-
-  const processFileList = (files: File[]) => {
-    const remainingSlots = 10 - mediaFiles.length
-    for (const file of files.slice(0, remainingSlots)) {
-      const reader = new FileReader()
-      reader.onload = () => {
-        const result = reader.result as string
-        setMediaFiles((prev) => [
-          ...prev,
-          {
-            dataBase64: result,
-            name: file.name,
-            type: file.type
-          }
-        ])
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-    processFileList(Array.from(files))
-    e.target.value = ''
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }
-
-  const handleDragLeave = () => {
-    setIsDragging(false)
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const files = Array.from(e.dataTransfer.files).filter(
-        (f) => f.type.startsWith('image/') || f.type.startsWith('video/')
-      )
-      processFileList(files)
-    }
-  }
-
-  const handleBotPost = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const target = (targetChatId || chatId).trim()
-    if (!target) {
-      setSendResult({ type: 'error', text: isZh ? '请填写发布目标频道或群组 ID (@channel 或 -100...)' : 'Please specify target channel ID' })
-      return
-    }
-    if (!postText.trim() && mediaFiles.length === 0) return
-    if (!botToken.trim()) {
-      setSendResult({ type: 'error', text: isZh ? '请先配置并保存 Telegram Bot Token' : 'Please configure Bot Token first' })
-      return
-    }
-
-    setIsSending(true)
-    setSendResult(null)
-
-    // Ensure credentials memory
-    handleSaveCredentials(botToken, target)
-
-    try {
-      const res = await window.rosetta.sendTelegramBotPost({
-        chatId: target,
-        text: postText.trim(),
-        botToken: botToken.trim(),
-        mediaFiles: mediaFiles.length > 0 ? mediaFiles : undefined
-      })
-
-      if (res.success) {
-        setSendResult({
-          type: 'success',
-          text: isZh ? `消息已成功通过机器人发布至 ${target}！` : `Message posted successfully to ${target}!`,
-          url: res.postUrl,
-          messageId: res.messageId
-        })
-        setPostText('')
-        setMediaFiles([])
-        loadPosts()
-      } else {
-        setSendResult({
-          type: 'error',
-          text: res.error || (isZh ? '机器人发布消息失败，请检查频道管理员权限' : 'Failed to send message via bot')
-        })
-      }
-    } catch (err: any) {
-      setSendResult({ type: 'error', text: err?.message || 'Execution error' })
-    } finally {
-      setIsSending(false)
     }
   }
 
@@ -304,12 +195,6 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
     }
   }
 
-  const copyUrl = (url: string) => {
-    navigator.clipboard.writeText(url)
-    setCopiedLink(true)
-    setTimeout(() => setCopiedLink(false), 2000)
-  }
-
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto h-full overflow-y-auto font-sans">
       {/* Top Header */}
@@ -318,20 +203,31 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
           <div className="flex items-center gap-2.5">
             <h2 className="text-base font-semibold text-foreground font-mono tracking-tight flex items-center gap-2">
               <Bot className="w-4 h-4 text-brand" />
-              <span>{isZh ? 'Telegram 机器人发帖与删帖工作台' : 'Telegram Bot Studio'}</span>
+              <span>{isZh ? 'Telegram 机器人与删帖控制台' : 'Telegram Bot Console'}</span>
             </h2>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
-              官方 Bot API 服务端直连
+              官方 Bot API 服务端
             </span>
           </div>
           <p className="text-xs text-gray-500 font-mono mt-0.5">
             {isZh
-              ? '直接使用你的 Telegram Bot 向频道发布图文、视频或相册消息，并支持全流程远程管理与一键删帖撤回'
-              : 'Directly publish channel posts with photos, videos and native albums, and manage remote revocation'}
+              ? '维护电报 Bot 服务端 Token 凭证与目标频道配置，提供频道消息远程管理与实时删帖撤回'
+              : 'Manage official Bot API credentials, channel configuration, and remote message revocation'}
           </p>
         </div>
 
         <div className="flex items-center gap-2 font-mono text-xs self-start sm:self-auto">
+          {onGoComposer && (
+            <button
+              onClick={onGoComposer}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand hover:bg-brand-hover text-white font-medium shadow-glow-terracotta transition-all active:scale-95"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>{isZh ? '前往统一发帖器发布' : 'Go to Composer'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           <button
             onClick={() => setShowManualDelete(!showManualDelete)}
             className={`px-3 py-1.5 rounded-lg border transition-all shadow-2xs flex items-center gap-1.5 ${
@@ -385,14 +281,14 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
               <div className="p-3 rounded-lg bg-surface-muted/50 border border-surface-border/70 space-y-1">
                 <div className="font-mono text-[11px] font-bold text-brand">步骤 2 · 拉入频道</div>
                 <p className="text-[11px] text-gray-600">
-                  将你刚刚创建的机器人以成员身份邀请添加到你想要发帖的公开或私有 Telegram 频道/群组中。
+                  将你刚刚创建的机器人以成员身份邀请添加到你想要同步广播的公开或私有 Telegram 频道/群组中。
                 </p>
               </div>
 
               <div className="p-3 rounded-lg bg-surface-muted/50 border border-surface-border/70 space-y-1">
                 <div className="font-mono text-[11px] font-bold text-brand">步骤 3 · 设为管理员</div>
                 <p className="text-[11px] text-gray-600">
-                  在频道设置中把该机器人设置为<strong>管理员 (Administrator)</strong>，并确保赋予<strong>发布消息 (Post Messages)</strong> 与 <strong>删除消息 (Delete Messages)</strong>。
+                  在频道设置中把该机器人设置为<strong>管理员 (Administrator)</strong>，并确保勾选<strong>发布消息 (Post Messages)</strong> 与 <strong>删除消息 (Delete Messages)</strong>。
                 </p>
               </div>
 
@@ -425,7 +321,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
           <div className="flex items-center gap-2">
             <KeyRound className="w-4 h-4 text-brand" />
             <h3 className="text-xs font-semibold uppercase tracking-wider font-mono text-foreground">
-              {isZh ? '机器人服务端凭证记忆' : 'Bot Token & Channel Memory'}
+              {isZh ? '机器人服务端凭证记忆配置' : 'Bot Credentials Configuration'}
             </h3>
           </div>
 
@@ -433,7 +329,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
             {savedToast && (
               <span className="text-emerald-700 font-semibold flex items-center gap-1 text-[11px] animate-fade-in">
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
-                <span>凭证已持久存盘</span>
+                <span>凭证已自动持久记忆</span>
               </span>
             )}
             {botProfile && (
@@ -449,7 +345,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-[11px] text-gray-600 font-semibold">
-                Telegram Bot Token (来自 @BotFather) *
+                Telegram Bot Token (HTTP API) *
               </label>
               <button
                 type="button"
@@ -483,7 +379,6 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
               value={chatId}
               onChange={(e) => {
                 setChatId(e.target.value)
-                setTargetChatId(e.target.value)
                 setManualChatId(e.target.value)
               }}
               onBlur={() => handleSaveCredentials(botToken, chatId)}
@@ -496,7 +391,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
           <div className="text-[11px] font-mono text-gray-500">
             {verifyError && <span className="text-rose-600 font-semibold">验证失败: {verifyError}</span>}
             {!verifyError && (
-              <span>凭证失焦自动存盘；在下方直接发帖或在聚合发帖器中均直接复用此凭证。</span>
+              <span>凭证失焦自动存盘；统一发帖器 (Composer) 发送电报时将直接使用该配置。</span>
             )}
           </div>
 
@@ -514,190 +409,11 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
               onClick={() => handleSaveCredentials(botToken, chatId)}
               className="px-4 py-1.5 rounded-lg bg-brand hover:bg-brand-hover text-white font-medium transition-all shadow-glow-terracotta active:scale-95"
             >
-              {isZh ? '立即保存' : 'Save'}
+              {isZh ? '保存凭证配置' : 'Save Config'}
             </button>
           </div>
         </div>
       </div>
-
-      {/* Bot Dedicated Post Composer Card */}
-      <form
-        onSubmit={handleBotPost}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={`rounded-xl bg-surface border transition-all p-5 shadow-panel space-y-4 relative ${
-          isDragging
-            ? 'border-brand ring-2 ring-brand/20 bg-brand-subtle/20'
-            : 'border-surface-border hover:border-gray-300'
-        }`}
-      >
-        {isDragging && (
-          <div className="absolute inset-0 bg-brand-subtle/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 rounded-xl border-2 border-dashed border-brand text-brand font-mono text-xs">
-            <UploadCloud className="w-8 h-8 animate-bounce" />
-            <span className="font-semibold text-sm">释放文件以添加为 Telegram 媒体</span>
-            <span className="text-[11px] opacity-80">支持图片与高清 MP4/WebM 视频（自动相册打包）</span>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between pb-3 border-b border-surface-border/70">
-          <div className="flex items-center gap-2">
-            <Send className="w-4 h-4 text-telegram" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider font-mono text-foreground">
-              {isZh ? '电报机器人专属发帖台' : 'Post to Channel via Bot'}
-            </h3>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs font-mono">
-            <span className="text-gray-500 text-[11px]">{isZh ? '发布目标' : 'Target'}:</span>
-            <input
-              type="text"
-              required
-              placeholder="e.g. @my_channel"
-              value={targetChatId}
-              onChange={(e) => setTargetChatId(e.target.value)}
-              className="bg-background border border-surface-border rounded-md px-2.5 py-1 text-xs text-foreground font-mono w-44 focus:outline-hidden focus:border-brand"
-            />
-          </div>
-        </div>
-
-        {/* Message Input Box */}
-        <div className="space-y-1.5">
-          <textarea
-            value={postText}
-            onChange={(e) => setPostText(e.target.value)}
-            disabled={isSending}
-            placeholder={
-              isZh
-                ? '在此输入需要通过机器人发布至 Telegram 频道的内容，支持 HTML 格式（<b>粗体</b>、<i>斜体</i>、<a>链接</a>）与多行换行...'
-                : 'Write your message to post to Telegram channel...'
-            }
-            rows={5}
-            className="w-full bg-background/50 border border-surface-border rounded-lg p-3.5 text-sm text-foreground placeholder-gray-400 focus:outline-hidden focus:border-brand focus:ring-1 focus:ring-brand/30 focus:bg-surface transition-all resize-none leading-relaxed font-sans"
-          />
-        </div>
-
-        {/* Media Attachments Preview Grid */}
-        {mediaFiles.length > 0 && (
-          <div className="space-y-2 pt-1 font-mono">
-            <div className="flex items-center justify-between text-[11px] text-gray-500">
-              <span>{isZh ? `已添加媒体附件 (${mediaFiles.length}/10)` : `Attached Media (${mediaFiles.length}/10)`}</span>
-              <button
-                type="button"
-                onClick={() => setMediaFiles([])}
-                className="text-gray-400 hover:text-rose-600 transition-colors"
-              >
-                {isZh ? '清空所有附件' : 'Clear All'}
-              </button>
-            </div>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
-              {mediaFiles.map((f, i) => (
-                <div
-                  key={i}
-                  className="relative group aspect-square rounded-lg overflow-hidden border border-surface-border bg-black/5 shadow-2xs hover:border-gray-400 transition-all"
-                >
-                  {f.type.startsWith('video/') ? (
-                    <div className="w-full h-full relative">
-                      <video src={f.dataBase64} className="w-full h-full object-cover" muted />
-                      <span className="absolute bottom-1 left-1 px-1 py-0.2 bg-black/75 text-white text-[9px] font-mono rounded flex items-center gap-0.5">
-                        <FileVideo className="w-2.5 h-2.5" />
-                        <span>VIDEO</span>
-                      </span>
-                    </div>
-                  ) : (
-                    <img src={f.dataBase64} alt={f.name} className="w-full h-full object-cover" />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setMediaFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="absolute top-1 right-1 bg-black/60 hover:bg-rose-600 text-white rounded-full p-1 transition-colors opacity-90 group-hover:opacity-100 shadow-sm"
-                    title="移除此项"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Action Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-surface-border">
-          <div className="flex items-center gap-3 text-xs font-mono">
-            <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-border hover:border-gray-400 bg-surface text-gray-700 hover:text-foreground cursor-pointer text-xs font-mono transition-all shadow-2xs hover:bg-surface-hover active:scale-95">
-              <ImageIcon className="w-3.5 h-3.5 text-brand" />
-              <span>{isZh ? `添加图片/视频 (${mediaFiles.length}/10)` : `Add Media (${mediaFiles.length}/10)`}</span>
-              <input
-                type="file"
-                accept="image/*,video/*"
-                multiple
-                onChange={handleFileSelect}
-                className="hidden"
-                disabled={mediaFiles.length >= 10 || isSending}
-              />
-            </label>
-
-            <span className="text-[11px] text-gray-500">
-              {mediaFiles.length > 1
-                ? isZh ? '多项媒体自动作为原生相册 (MediaGroup) 整体发布' : 'Grouped as native Telegram album'
-                : ''}
-            </span>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isSending || (!postText.trim() && mediaFiles.length === 0) || !(targetChatId || chatId).trim()}
-            className="flex items-center justify-center gap-2 px-5 py-2 rounded-lg bg-brand hover:bg-brand-hover text-white text-xs font-mono font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-glow-terracotta active:scale-[0.98]"
-          >
-            <Send className={`w-3.5 h-3.5 ${isSending ? 'animate-spin' : ''}`} />
-            <span>{isSending ? (isZh ? '正在推送至 Telegram...' : 'Posting...') : (isZh ? '通过机器人发布至频道' : 'Publish via Bot')}</span>
-          </button>
-        </div>
-      </form>
-
-      {/* Post Result Alert */}
-      {sendResult && (
-        <div
-          className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono shadow-panel transition-all ${
-            sendResult.type === 'success'
-              ? 'bg-emerald-50/90 text-emerald-900 border-emerald-300'
-              : 'bg-rose-50/90 text-rose-900 border-rose-300'
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            {sendResult.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            )}
-            <span className="font-semibold">{sendResult.text}</span>
-          </div>
-
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            {sendResult.url && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => copyUrl(sendResult.url!)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors text-[11px]"
-                >
-                  {copiedLink ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedLink ? '已复制' : '复制链接'}</span>
-                </button>
-                <a
-                  href={sendResult.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1 px-3 py-1 rounded bg-brand text-white hover:bg-brand-hover font-semibold text-[11px] transition-all shadow-2xs"
-                >
-                  <span>{isZh ? '在 Telegram 查看' : 'View on Telegram'}</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Manual Remote Message Revocation Tool */}
       {showManualDelete && (
@@ -765,10 +481,10 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-              {isZh ? `机器人已发消息管理 (${posts.length})` : `Sent Message Management (${posts.length})`}
+              {isZh ? `已发布消息管理 (${posts.length})` : `Sent Message Management (${posts.length})`}
             </h3>
             <span className="text-[10px] text-gray-500">
-              {isZh ? '支持一键撤回频道中已发送的任意消息' : 'One-click remote message deletion'}
+              {isZh ? '一键撤回频道中已发送的任意消息' : 'One-click remote message deletion'}
             </span>
           </div>
 
@@ -800,7 +516,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
             <Bot className="w-8 h-8 opacity-40 text-brand" />
             <p className="text-xs">
               {isZh
-                ? '暂无机器人发帖历史记录。在上方发帖后，消息将汇集于此处供随时撤回。'
+                ? '暂无机器人发帖历史记录。使用「统一发帖器」发送至电报后，消息将汇集于此处供随时撤回。'
                 : 'No messages posted yet. Sent messages will be recorded here for one-click revocation.'}
             </p>
           </div>
