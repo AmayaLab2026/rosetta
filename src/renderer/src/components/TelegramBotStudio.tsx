@@ -27,8 +27,7 @@ interface TelegramBotStudioProps {
 }
 
 export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
-  const { language } = useI18n()
-  const isZh = language === 'zh'
+  const { t } = useI18n()
 
   // Credentials & Configuration
   const [botToken, setBotToken] = useState('')
@@ -50,8 +49,25 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
   const [posts, setPosts] = useState<TelegramBotPostItem[]>([])
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
+  // Pairing Code Security
+  const [pairingCode, setPairingCode] = useState('')
+  const [authorizedUsers, setAuthorizedUsers] = useState<number[]>([])
+  const [copiedCode, setCopiedCode] = useState(false)
+
   // Tutorial Collapse state
   const [showTutorial, setShowTutorial] = useState(false)
+
+  const loadPairing = async () => {
+    try {
+      const info = await window.rosetta.getBotPairingInfo?.()
+      if (info) {
+        setPairingCode(info.pairingCode)
+        setAuthorizedUsers(info.authorizedUserIds || [])
+      }
+    } catch (e) {
+      console.warn('Failed to load pairing info:', e)
+    }
+  }
 
   // Load saved credentials & posts history on mount
   useEffect(() => {
@@ -73,11 +89,13 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
     }).catch(() => {})
 
     loadPosts()
+    loadPairing()
 
     const fetchInteractiveStatus = () => {
       window.rosetta.getTelegramBotInteractiveStatus?.().then((res) => {
         if (res) setInteractiveStatus(res)
       }).catch(() => {})
+      loadPairing()
     }
     fetchInteractiveStatus()
     const timer = setInterval(fetchInteractiveStatus, 3000)
@@ -121,19 +139,17 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
         setBotProfile({ botName: res.botName, username: res.username })
         await handleSaveCredentials(botToken, chatId)
       } else {
-        setVerifyError(res?.error || (isZh ? 'Token 无效，请核对来自 @BotFather 的凭据' : 'Invalid Bot Token'))
+        setVerifyError(res?.error || t.bot.tokenInvalid)
       }
     } catch (err: any) {
-      setVerifyError(err.message || 'Token 验证失败')
+      setVerifyError(err.message || t.bot.tokenInvalid)
     } finally {
       setIsVerifying(false)
     }
   }
 
   const handleDeletePost = async (item: TelegramBotPostItem) => {
-    const confirmText = isZh
-      ? `确定要通过 Bot API 从 ${item.chatId} 撤回/删除消息 #${item.messageId} 吗？`
-      : `Revoke message #${item.messageId} from ${item.chatId} via Bot API?`
+    const confirmText = `${t.deletion.confirmDeleteTg} #${item.messageId}?`
     if (!window.confirm(confirmText)) return
 
     setDeletingId(item.id)
@@ -147,39 +163,61 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
       if (res.success) {
         loadPosts()
       } else {
-        alert(isZh ? `撤回失败: ${res.error}` : `Failed to delete: ${res.error}`)
+        alert(`${t.deletion.deleteFailed}: ${res.error}`)
       }
     } catch (err: any) {
-      alert(err.message || 'Delete operation failed')
+      alert(err.message || t.deletion.deleteFailed)
     } finally {
       setDeletingId(null)
     }
   }
 
   const handleClearHistory = async () => {
-    if (window.confirm(isZh ? '清空本地已发消息记录？（不会影响 Telegram 频道上的线上消息）' : 'Clear local records?')) {
+    if (window.confirm(t.bot.clear)) {
       await window.rosetta.clearTelegramBotPosts?.()
       setPosts([])
     }
   }
 
+  const handleResetCode = async () => {
+    try {
+      const newCode = await window.rosetta.resetBotPairingCode?.()
+      if (newCode) setPairingCode(newCode)
+    } catch (e) {
+      console.warn('Failed to reset code:', e)
+    }
+  }
+
+  const handleRevokeUser = async (userId: number) => {
+    try {
+      await window.rosetta.revokeBotAuthorizedUser?.(userId)
+      setAuthorizedUsers((prev) => prev.filter((id) => id !== userId))
+    } catch (e) {
+      console.warn('Failed to revoke user:', e)
+    }
+  }
+
+  const copyPairingCode = () => {
+    navigator.clipboard.writeText(pairingCode)
+    setCopiedCode(true)
+    setTimeout(() => setCopiedCode(false), 2000)
+  }
+
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto h-full overflow-y-auto font-sans">
-      {/* Top Header without extra buttons */}
+      {/* Top Header */}
       <div>
         <div className="flex items-center gap-2.5">
           <h2 className="text-base font-semibold text-foreground font-mono tracking-tight flex items-center gap-2">
             <Bot className="w-4 h-4 text-brand" />
-            <span>{isZh ? 'Telegram 机器人中枢 (交互发帖 & 删帖)' : 'Telegram Bot Studio'}</span>
+            <span>{t.bot.title}</span>
           </h2>
           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
-            官方 Bot API 交互会话
+            {t.bot.badge}
           </span>
         </div>
         <p className="text-xs text-gray-500 font-mono mt-0.5">
-          {isZh
-            ? '用户可在 Telegram 私聊中直接与机器人沟通发帖至推特和频道，并提供远程管理与删帖撤回'
-            : 'Interact with bot in private chat to post to Twitter/channel, manage revocation and credentials'}
+          {t.bot.desc}
         </p>
       </div>
 
@@ -193,7 +231,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-sm text-foreground">
-                  {interactiveStatus.botUsername ? `@${interactiveStatus.botUsername}` : (isZh ? '电报交互发帖机器人' : 'Telegram Interactive Bot')}
+                  {interactiveStatus.botUsername ? `@${interactiveStatus.botUsername}` : t.bot.title}
                 </span>
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold flex items-center gap-1.5 ${
                   interactiveStatus.polling
@@ -201,13 +239,11 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
                     : 'bg-surface-muted text-gray-500 border border-surface-border'
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${interactiveStatus.polling ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
-                  <span>{interactiveStatus.polling ? (isZh ? '私聊会话就绪·正在监听' : 'Chat Polling Active') : (isZh ? '未启动' : 'Idle')}</span>
+                  <span>{interactiveStatus.polling ? t.bot.botActive : t.bot.botIdle}</span>
                 </span>
               </div>
               <p className="text-xs text-gray-500 font-mono mt-0.5">
-                {isZh
-                  ? '在手机或桌面 Telegram 私聊中发送 /start，即可直接交互发帖至推特与电报频道'
-                  : 'Send /start in private chat with this bot to publish interactively'}
+                {t.bot.botChatPrompt}
               </p>
             </div>
           </div>
@@ -220,7 +256,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-telegram hover:bg-telegram/90 text-white font-mono text-xs font-semibold shadow-2xs transition-all active:scale-95 self-start sm:self-auto"
             >
               <MessageSquare className="w-3.5 h-3.5" />
-              <span>{isZh ? '打开 Telegram 私聊发帖' : 'Open Chat in Telegram'}</span>
+              <span>{t.bot.openChatInTg}</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           )}
@@ -229,16 +265,99 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
         {/* Workflow Steps Preview */}
         <div className="pt-2 border-t border-surface-border/60 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] font-mono text-gray-600">
           <div className="p-2.5 rounded-lg bg-surface-muted/40 border border-surface-border/60 space-y-0.5">
-            <span className="font-bold text-telegram block">1. 发送 /start</span>
-            <span className="text-gray-500 text-[10px]">在 Telegram 私聊唤起机器人，点击选项卡选择发布目标 (Twitter / 频道 / 两端)</span>
+            <span className="font-bold text-telegram block">{t.bot.step1Title}</span>
+            <span className="text-gray-500 text-[10px]">{t.bot.step1Desc}</span>
           </div>
           <div className="p-2.5 rounded-lg bg-surface-muted/40 border border-surface-border/60 space-y-0.5">
-            <span className="font-bold text-telegram block">2. 发送文字或媒体</span>
-            <span className="text-gray-500 text-[10px]">直接发送文本或上传图片、视频（自动相册打包），机器人暂存并展示预览</span>
+            <span className="font-bold text-telegram block">{t.bot.step2Title}</span>
+            <span className="text-gray-500 text-[10px]">{t.bot.step2Desc}</span>
           </div>
           <div className="p-2.5 rounded-lg bg-surface-muted/40 border border-surface-border/60 space-y-0.5">
-            <span className="font-bold text-telegram block">3. 确认并返回链接</span>
-            <span className="text-gray-500 text-[10px]">点击【确认发布】，机器人即刻执行分发并回复直达推文与频道链接</span>
+            <span className="font-bold text-telegram block">{t.bot.step3Title}</span>
+            <span className="text-gray-500 text-[10px]">{t.bot.step3Desc}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Bot Pairing Code & Access Security Card */}
+      <div className="rounded-xl bg-surface border border-surface-border p-5 shadow-panel space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-surface-border/70">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-xs font-semibold uppercase tracking-wider font-mono text-foreground">
+              {t.bot.pairingTitle}
+            </h3>
+          </div>
+          <span className="text-[11px] font-mono text-gray-500">
+            {t.bot.pairingDesc}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center font-mono">
+          {/* Pairing Code Display */}
+          <div className="p-4 rounded-xl bg-surface-muted/60 border border-surface-border flex items-center justify-between">
+            <div>
+              <span className="text-[11px] text-gray-500 block mb-1">
+                {t.bot.pairingCodeLabel}
+              </span>
+              <span className="text-2xl font-bold tracking-widest text-brand font-mono">
+                {pairingCode || '------'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={copyPairingCode}
+                className="px-3 py-1.5 rounded-lg bg-surface border border-surface-border hover:bg-surface-hover text-gray-700 hover:text-foreground text-xs font-mono transition-all flex items-center gap-1.5 shadow-2xs"
+                title={t.bot.copyCode}
+              >
+                {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-gray-500" />}
+                <span>{copiedCode ? t.terminal.copied : t.bot.copyCode}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetCode}
+                className="p-1.5 rounded-lg border border-surface-border bg-surface hover:bg-surface-hover text-gray-500 hover:text-foreground text-xs font-mono transition-all shadow-2xs"
+                title={t.bot.resetCode}
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Authorized Telegram User IDs List */}
+          <div className="p-4 rounded-xl bg-surface-muted/60 border border-surface-border space-y-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-semibold text-gray-700">{t.bot.authorizedUsersTitle}</span>
+              <span className="text-gray-400">({authorizedUsers.length})</span>
+            </div>
+
+            {authorizedUsers.length === 0 ? (
+              <p className="text-[11px] text-gray-500 font-sans">
+                {t.bot.noAuthorizedUsers}
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {authorizedUsers.map((uid) => (
+                  <span
+                    key={uid}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-surface-border text-xs font-mono text-gray-800 shadow-2xs"
+                  >
+                    <span>ID: {uid}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRevokeUser(uid)}
+                      className="text-gray-400 hover:text-rose-600 transition-colors ml-1"
+                      title={t.bot.revokeUser}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -251,10 +370,10 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
         >
           <div className="flex items-center gap-2 text-xs font-mono font-semibold text-brand">
             <HelpCircle className="w-4 h-4 text-brand" />
-            <span>{isZh ? '📖 官方机器人 (@BotFather) 极速创建与频道配置指南' : 'Official Bot Creation & Channel Guide'}</span>
+            <span>{t.bot.guideTitle}</span>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-mono text-gray-500">
-            <span>{showTutorial ? (isZh ? '收起教程' : 'Hide') : (isZh ? '展开教程' : 'Show Guide')}</span>
+            <span>{showTutorial ? t.bot.hideGuide : t.bot.showGuide}</span>
             {showTutorial ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </div>
         </div>
@@ -322,7 +441,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
           <div className="flex items-center gap-2">
             <KeyRound className="w-4 h-4 text-brand" />
             <h3 className="text-xs font-semibold uppercase tracking-wider font-mono text-foreground">
-              {isZh ? '机器人服务端凭证记忆配置' : 'Bot Credentials Configuration'}
+              {t.bot.credentialsTitle}
             </h3>
           </div>
 
@@ -330,7 +449,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
             {savedToast && (
               <span className="text-emerald-700 font-semibold flex items-center gap-1 text-[11px] animate-fade-in">
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
-                <span>凭证已自动持久记忆</span>
+                <span>{t.bot.credentialsSaved}</span>
               </span>
             )}
             {botProfile && (
@@ -346,7 +465,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-[11px] text-gray-600 font-semibold">
-                Telegram Bot Token (HTTP API) *
+                {t.bot.tokenLabel}
               </label>
               <button
                 type="button"
@@ -354,7 +473,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
                 className="text-gray-400 hover:text-gray-600 flex items-center gap-1 text-[10px]"
               >
                 {showToken ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                <span>{showToken ? (isZh ? '隐藏' : 'Hide') : (isZh ? '显示' : 'Show')}</span>
+                <span>{showToken ? '隐藏' : '显示'}</span>
               </button>
             </div>
             <input
@@ -372,7 +491,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
 
           <div>
             <label className="block text-[11px] text-gray-600 mb-1 font-semibold">
-              {isZh ? '默认推送目标频道 ID 或 @username *' : 'Default Channel / Chat ID *'}
+              {t.bot.channelLabel}
             </label>
             <input
               type="text"
@@ -389,9 +508,9 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
           <div className="text-[11px] font-mono text-gray-500">
-            {verifyError && <span className="text-rose-600 font-semibold">验证失败: {verifyError}</span>}
+            {verifyError && <span className="text-rose-600 font-semibold">{t.bot.tokenInvalid}: {verifyError}</span>}
             {!verifyError && (
-              <span>凭证失焦自动存盘；机器人自动连接 Telegram Long Polling，接收私聊指令。</span>
+              <span>{t.bot.credentialsNote}</span>
             )}
           </div>
 
@@ -402,14 +521,14 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
               disabled={isVerifying || !botToken.trim()}
               className="px-4 py-1.5 rounded-lg border border-surface-border bg-surface hover:bg-surface-hover text-gray-700 hover:text-foreground font-medium transition-all shadow-2xs disabled:opacity-50 active:scale-95"
             >
-              {isVerifying ? (isZh ? '验证中...' : 'Verifying...') : (isZh ? '测试 Token 连通性' : 'Test Token')}
+              {isVerifying ? t.bot.testingToken : t.bot.testToken}
             </button>
             <button
               type="button"
               onClick={() => handleSaveCredentials(botToken, chatId)}
               className="px-4 py-1.5 rounded-lg bg-brand hover:bg-brand-hover text-white font-medium transition-all shadow-glow-terracotta active:scale-95"
             >
-              {isZh ? '保存凭证配置' : 'Save Config'}
+              {t.bot.saveConfig}
             </button>
           </div>
         </div>
@@ -420,10 +539,10 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-              {isZh ? `已发布消息管理 (${posts.length})` : `Sent Message Management (${posts.length})`}
+              {`${t.bot.sentHistoryTitle} (${posts.length})`}
             </h3>
             <span className="text-[10px] text-gray-500">
-              {isZh ? '一键撤回频道中已发送的任意消息' : 'One-click remote message deletion'}
+              {t.bot.sentHistorySub}
             </span>
           </div>
 
@@ -434,7 +553,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
               className="text-[11px] text-gray-500 hover:text-foreground flex items-center gap-1 transition-colors"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>{isZh ? '刷新' : 'Refresh'}</span>
+              <span>{t.bot.refresh}</span>
             </button>
 
             {posts.length > 0 && (
@@ -442,7 +561,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
                 type="button"
                 onClick={handleClearHistory}
                 className="p-1 rounded text-gray-400 hover:text-rose-600 transition-colors"
-                title={isZh ? '清空本地记录' : 'Clear'}
+                title={t.bot.clear}
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -454,9 +573,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
           <div className="py-12 flex flex-col items-center justify-center text-center space-y-2 text-gray-400">
             <Bot className="w-8 h-8 opacity-40 text-brand" />
             <p className="text-xs">
-              {isZh
-                ? '暂无已发消息记录。在 Telegram 私聊发帖或在「统一发帖器」发布后，消息将汇集于此处供随时撤回。'
-                : 'No messages posted yet. Sent messages will be recorded here for one-click revocation.'}
+              {t.bot.noPosts}
             </p>
           </div>
         ) : (
@@ -496,12 +613,12 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
                     <div className="flex items-center gap-2">
                       {isDel ? (
                         <span className="px-2 py-0.5 rounded-full text-[10px] bg-gray-200 text-gray-600 border border-gray-300 font-semibold">
-                          {isZh ? '已从频道撤回' : 'DELETED'}
+                          {t.bot.deleted}
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-300 font-semibold flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>{isZh ? '频道在线' : 'ACTIVE'}</span>
+                          <span>{t.bot.active}</span>
                         </span>
                       )}
 
@@ -513,7 +630,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
                           className="text-brand hover:underline flex items-center gap-1 text-[11px] font-semibold bg-brand-subtle px-2 py-0.5 rounded border border-brand-border/60 transition-colors"
                         >
                           <ExternalLink className="w-3 h-3" />
-                          <span>{isZh ? '直达' : 'Link'}</span>
+                          <span>{t.bot.link}</span>
                         </a>
                       )}
 
@@ -526,7 +643,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
                           title="远程撤回/删除这条电报消息"
                         >
                           <Trash2 className="w-3 h-3" />
-                          <span>{deletingId === item.id ? (isZh ? '撤回中...' : 'Deleting...') : (isZh ? '撤回此帖' : 'Revoke')}</span>
+                          <span>{deletingId === item.id ? t.bot.revoking : t.bot.revoke}</span>
                         </button>
                       )}
                     </div>

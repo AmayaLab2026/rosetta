@@ -103,6 +103,30 @@ export interface TelegramBotSendPayload {
   mediaFiles?: Array<{ dataBase64: string; name: string; type: string }>
 }
 
+export interface AppVersionInfo {
+  version: string
+  electron: string
+  node: string
+  chrome: string
+  v8: string
+}
+
+export interface TelegramChannelPost {
+  id: number
+  date: string
+  text: string
+  hasMedia: boolean
+  mediaType?: string
+  url?: string
+}
+
+export interface TwitterPostItem {
+  id: string
+  createdAt: string
+  text: string
+  url: string
+}
+
 export interface MirroredPostRecord {
   id: string
   ruleId: string
@@ -151,6 +175,8 @@ export interface AppSettings {
   startMinimized?: boolean
   defaultBotToken?: string
   defaultBotChatId?: string
+  botPairingCode?: string
+  botAuthorizedUserIds?: number[]
 }
 
 export interface RosettaAPI {
@@ -196,6 +222,16 @@ export interface RosettaAPI {
   verifyTelegramBotToken: (token: string) => Promise<{ valid: boolean; botName?: string; username?: string; error?: string }>
   getTelegramBotInteractiveStatus: () => Promise<{ polling: boolean; botUsername: string | null; botFirstName: string | null }>
   toggleTelegramBotInteractive: (start: boolean) => Promise<boolean>
+  getBotPairingInfo: () => Promise<{ pairingCode: string; authorizedUserIds: number[] }>
+  resetBotPairingCode: () => Promise<string>
+  revokeBotAuthorizedUser: (userId: number) => Promise<boolean>
+
+  // Dedicated Channel / Twitter Post Deletion Studio
+  getTelegramRecentPosts: (params?: { channelId?: string; limit?: number }) => Promise<TelegramChannelPost[]>
+  getTwitterRecentPosts: (params?: { accountId?: string; limit?: number }) => Promise<TwitterPostItem[]>
+  deleteTwitterTweet: (params: { accountId?: string; tweetId: string }) => Promise<{ success: boolean; error?: string }>
+  deleteTelegramChannelPost: (params: { channelId?: string; messageId: number }) => Promise<{ success: boolean; error?: string }>
+  getAppVersionInfo: () => Promise<AppVersionInfo>
 
   // Settings & System
   getSettings: () => Promise<AppSettings>

@@ -261,6 +261,52 @@ export class AppStore {
     this.persist(true)
   }
 
+  // --- Telegram Bot Pairing & Authorization ---
+  public getBotPairingCode(): string {
+    if (!this.data.settings.botPairingCode) {
+      this.data.settings.botPairingCode = Math.floor(100000 + Math.random() * 900000).toString()
+      this.persist(true)
+    }
+    return this.data.settings.botPairingCode
+  }
+
+  public resetBotPairingCode(): string {
+    const code = Math.floor(100000 + Math.random() * 900000).toString()
+    this.data.settings.botPairingCode = code
+    this.persist(true)
+    return code
+  }
+
+  public getBotAuthorizedUserIds(): number[] {
+    return this.data.settings.botAuthorizedUserIds || []
+  }
+
+  public isBotUserAuthorized(userId: number): boolean {
+    const list = this.data.settings.botAuthorizedUserIds || []
+    return list.includes(userId)
+  }
+
+  public addBotAuthorizedUserId(userId: number): void {
+    if (!this.data.settings.botAuthorizedUserIds) {
+      this.data.settings.botAuthorizedUserIds = []
+    }
+    if (!this.data.settings.botAuthorizedUserIds.includes(userId)) {
+      this.data.settings.botAuthorizedUserIds.push(userId)
+      this.persist(true)
+    }
+  }
+
+  public revokeBotAuthorizedUserId(userId: number): boolean {
+    if (!this.data.settings.botAuthorizedUserIds) return false
+    const initLen = this.data.settings.botAuthorizedUserIds.length
+    this.data.settings.botAuthorizedUserIds = this.data.settings.botAuthorizedUserIds.filter((id) => id !== userId)
+    if (this.data.settings.botAuthorizedUserIds.length < initLen) {
+      this.persist(true)
+      return true
+    }
+    return false
+  }
+
   // --- Settings ---
   public getSettings() {
     return this.data.settings

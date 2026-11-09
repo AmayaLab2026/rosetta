@@ -220,7 +220,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleVerify(twitterAccount.id)}
-                title="刷新资料与头像 / Verify Session"
+                title={t.studio.viewTweet}
                 disabled={refreshingId === twitterAccount.id}
                 className="p-1.5 rounded-lg text-gray-600 hover:text-foreground hover:bg-surface-hover border border-surface-border transition-colors disabled:opacity-50"
               >
@@ -354,7 +354,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleVerify(telegramAccount.id)}
-                title="刷新资料与头像 / Refresh Telegram Profile"
+                title={t.accounts.connectedMtproto}
                 disabled={refreshingId === telegramAccount.id}
                 className="p-1.5 rounded-lg text-gray-600 hover:text-foreground hover:bg-surface-hover border border-surface-border transition-colors disabled:opacity-50"
               >

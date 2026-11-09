@@ -246,13 +246,11 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs, onOpen
           <div className="flex items-center gap-2">
             <h2 className="text-base font-semibold text-foreground font-mono tracking-tight">{t.composer.title}</h2>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-brand-subtle text-brand border border-brand-border/60">
-              {isZh ? '聚合多端广播' : 'Cross-Platform Broadcast'}
+              {t.composer.crossPlatformBadge}
             </span>
           </div>
           <p className="text-xs text-gray-500 font-mono mt-0.5">
-            {isZh
-              ? '支持单选或同时勾选推特与电报，实现一键图文/视频多平台瞬时分发'
-              : 'Publish to Twitter, Telegram, or broadcast to both simultaneously'}
+            {t.composer.crossPlatformDesc}
           </p>
         </div>
 
@@ -270,7 +268,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs, onOpen
             }`}
           >
             <span className="w-4 h-4 rounded bg-black text-white flex items-center justify-center font-bold text-[10px]">𝕏</span>
-            <span>{activeTwitterAccount ? `@${activeTwitterAccount.username}` : (isZh ? '推特未绑定' : 'X Unlinked')}</span>
+            <span>{activeTwitterAccount ? `@${activeTwitterAccount.username}` : t.composer.noTwitterAcc}</span>
             <span className={`w-2 h-2 rounded-full ${sendToTwitter && activeTwitterAccount ? 'bg-sky-500' : 'bg-gray-300'}`} />
           </button>
 
@@ -294,9 +292,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs, onOpen
             <span>
               {botConfig.chatId
                 ? `TG: ${botConfig.chatId}`
-                : isZh
-                ? '电报 (点击配置)'
-                : 'TG (Setup)'}
+                : t.composer.tgNotConfigured}
             </span>
             <span
               className={`w-2 h-2 rounded-full ${
@@ -314,9 +310,9 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs, onOpen
               setSendToTelegram(enableBoth)
             }}
             className="px-2 py-1.5 rounded-lg border border-surface-border bg-surface hover:bg-surface-hover text-gray-600 hover:text-foreground text-[11px] transition-colors"
-            title="同时选中两个平台"
+            title={t.composer.bothPlatforms}
           >
-            {isZh ? '两端同步' : 'Both'}
+            {t.composer.bothPlatforms}
           </button>
         </div>
       </div>
@@ -485,12 +481,12 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs, onOpen
             <Send className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
             <span>
               {isSubmitting
-                ? `发布中 (${elapsedSec}s)...`
+                ? `${t.composer.publishing} (${elapsedSec}s)...`
                 : sendToTwitter && sendToTelegram
-                ? (isZh ? '一键同时发布至推特与电报' : 'Broadcast to X & Telegram')
+                ? t.composer.bothBtn
                 : sendToTelegram
-                ? (isZh ? '发布至 Telegram 频道' : 'Publish to Telegram')
-                : t.composer.broadcastBtn}
+                ? t.composer.tgOnlyBtn
+                : t.composer.twOnlyBtn}
             </span>
           </button>
         </div>
@@ -518,7 +514,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs, onOpen
                   <span className="font-bold mr-2 uppercase">
                     [{item.platform === 'telegram' ? 'Telegram' : 'X (Twitter)'}]
                   </span>
-                  <span>{item.success ? (isZh ? '发布成功' : 'Published Successfully') : item.error}</span>
+                  <span>{item.success ? t.composer.publishSuccess : item.error}</span>
                 </div>
               </div>
 
@@ -529,10 +525,10 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs, onOpen
                       type="button"
                       onClick={() => copyUrl(item.url!)}
                       className="flex items-center gap-1 px-2.5 py-1 rounded bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors text-[11px]"
-                      title="复制链接"
+                      title={t.logs.copy}
                     >
                       {copiedLink ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                      <span>{copiedLink ? '已复制' : '复制链接'}</span>
+                      <span>{copiedLink ? t.logs.copied : t.logs.copy}</span>
                     </button>
                     <a
                       href={item.url}
@@ -540,7 +536,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs, onOpen
                       rel="noreferrer"
                       className="flex items-center gap-1 px-3 py-1 rounded bg-brand text-white hover:bg-brand-hover font-semibold text-[11px] transition-all shadow-2xs"
                     >
-                      <span>{item.platform === 'telegram' ? '在 Telegram 查看' : t.composer.openOnX}</span>
+                      <span>{item.platform === 'telegram' ? t.composer.openOnTelegram : t.composer.openOnX}</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   </>
@@ -562,7 +558,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs, onOpen
                   onClick={onOpenLogs}
                   className="text-gray-600 hover:text-foreground underline flex items-center gap-1"
                 >
-                  <span>查看活动流水</span>
+                  <span>{t.logs.title}</span>
                   <ArrowRight className="w-3 h-3" />
                 </button>
               )}

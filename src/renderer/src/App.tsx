@@ -4,6 +4,7 @@ import { Sidebar, TabType } from './components/Sidebar'
 import { MirrorStudio } from './components/MirrorStudio'
 import { Composer } from './components/Composer'
 import { TelegramBotStudio } from './components/TelegramBotStudio'
+import { DeletionView } from './components/DeletionView'
 import { RulesManager } from './components/RulesManager'
 import { AccountsManager } from './components/AccountsManager'
 import { LogsView } from './components/LogsView'
@@ -175,6 +176,10 @@ function RosettaMain() {
 
           {currentTab === 'bot' && (
             <TelegramBotStudio accounts={accounts} />
+          )}
+
+          {currentTab === 'deletion' && (
+            <DeletionView accounts={accounts} />
           )}
 
           {currentTab === 'rules' && (

@@ -47,6 +47,16 @@ const api: RosettaAPI = {
   verifyTelegramBotToken: (token) => ipcRenderer.invoke('telegram:bot-verify-token', token),
   getTelegramBotInteractiveStatus: () => ipcRenderer.invoke('telegram:bot-interactive-status'),
   toggleTelegramBotInteractive: (start) => ipcRenderer.invoke('telegram:bot-interactive-toggle', start),
+  getBotPairingInfo: () => ipcRenderer.invoke('telegram:bot-get-pairing-info'),
+  resetBotPairingCode: () => ipcRenderer.invoke('telegram:bot-reset-pairing-code'),
+  revokeBotAuthorizedUser: (userId) => ipcRenderer.invoke('telegram:bot-revoke-user', userId),
+
+  // Dedicated Channel / Twitter Post Deletion Studio
+  getTelegramRecentPosts: (params) => ipcRenderer.invoke('telegram:get-channel-recent', params),
+  getTwitterRecentPosts: (params) => ipcRenderer.invoke('twitter:get-recent-tweets', params),
+  deleteTwitterTweet: (params) => ipcRenderer.invoke('twitter:delete-tweet', params),
+  deleteTelegramChannelPost: (params) => ipcRenderer.invoke('telegram:delete-channel-post', params),
+  getAppVersionInfo: () => ipcRenderer.invoke('app:get-version-info'),
 
   // Settings & System
   getSettings: () => ipcRenderer.invoke('settings:get'),

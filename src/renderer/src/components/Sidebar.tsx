@@ -1,8 +1,8 @@
 import React from 'react'
-import { Radio, Send, Sliders, Users, FileText, Terminal, Settings, Bot } from 'lucide-react'
+import { Radio, Send, Sliders, Users, FileText, Terminal, Settings, Bot, Trash2 } from 'lucide-react'
 import { useI18n } from '../i18n'
 
-export type TabType = 'studio' | 'composer' | 'bot' | 'rules' | 'accounts' | 'logs' | 'terminal' | 'settings'
+export type TabType = 'studio' | 'composer' | 'bot' | 'deletion' | 'rules' | 'accounts' | 'logs' | 'terminal' | 'settings'
 
 interface SidebarProps {
   currentTab: TabType
@@ -26,12 +26,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const items: Array<{ id: TabType; label: string; icon: any; count?: number }> = [
     { id: 'studio', label: t.sidebar.studio, icon: Radio },
     { id: 'composer', label: t.sidebar.composer, icon: Send },
-    { id: 'bot', label: (t.sidebar as any).bot || '电报机器人', icon: Bot },
+    { id: 'bot', label: t.sidebar.bot, icon: Bot },
+    { id: 'deletion', label: t.sidebar.deletion, icon: Trash2 },
     { id: 'rules', label: t.sidebar.rules, icon: Sliders, count: rulesCount },
     { id: 'accounts', label: t.sidebar.accounts, icon: Users, count: accountsCount },
     { id: 'logs', label: t.sidebar.logs, icon: FileText, count: logsCount },
-    { id: 'terminal', label: (t.sidebar as any).terminal || '终端日志', icon: Terminal, count: terminalLogsCount },
-    { id: 'settings', label: (t.sidebar as any).settings || '系统设置', icon: Settings }
+    { id: 'terminal', label: t.sidebar.terminal, icon: Terminal, count: terminalLogsCount },
+    { id: 'settings', label: t.sidebar.settings, icon: Settings }
   ]
 
   return (

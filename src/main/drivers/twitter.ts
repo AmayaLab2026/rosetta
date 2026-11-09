@@ -933,6 +933,63 @@ export class TwitterDriver {
   }
 
   /**
+   * Fetch recent N tweets for the authenticated user (for deletion studio)
+   */
+  async fetchRecentTweetsForDeletion(
+    account: Account,
+    limit = 5
+  ): Promise<Array<{ id: string; createdAt: string; text: string; url: string }>> {
+    const { authToken, ct0 } = account.credentials
+    if (!authToken || !ct0) return []
+
+    try {
+      const res = await fetch(
+        `https://api.twitter.com/1.1/statuses/user_timeline.json?count=${limit}&tweet_mode=extended&screen_name=${account.username}`,
+        {
+          headers: {
+            authorization: TWITTER_BEARER_TOKEN,
+            'x-csrf-token': ct0,
+            'x-twitter-auth-type': 'OAuth2Session',
+            'x-twitter-active-user': 'yes',
+            cookie: `auth_token=${authToken}; ct0=${ct0}`,
+            'user-agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+            referer: 'https://x.com/'
+          }
+        }
+      )
+      if (res.ok) {
+        const data = (await res.json()) as any[]
+        if (Array.isArray(data) && data.length > 0) {
+          return data.map((t) => ({
+            id: t.id_str || String(t.id),
+            createdAt: new Date(t.created_at).toISOString(),
+            text: t.full_text || t.text || '',
+            url: `https://x.com/${account.username}/status/${t.id_str || t.id}`
+          }))
+        }
+      }
+    } catch (e: any) {
+      console.warn('[TwitterDriver] fetchRecentTweets via API failed:', e.message)
+    }
+
+    // Fallback: extract from locally tracked mirrored posts and composer logs
+    const mirrored = appStore
+      .getMirroredPosts()
+      .filter((m) => m.targetPlatform === 'twitter' && m.targetAccountId === account.id)
+    const recentTweetIds = Array.from(new Set(mirrored.flatMap((m) => m.targetTweetIds)))
+      .slice(-limit)
+      .reverse()
+
+    return recentTweetIds.map((tid) => ({
+      id: tid,
+      createdAt: new Date().toISOString(),
+      text: `推文 #${tid}`,
+      url: `https://x.com/${account.username}/status/${tid}`
+    }))
+  }
+
+  /**
    * Check if a tweet exists on Twitter (returns false if 404/deleted)
    */
   async checkTweetExists(account: Account, tweetId: string): Promise<boolean> {

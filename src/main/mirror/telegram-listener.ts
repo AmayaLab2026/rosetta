@@ -775,6 +775,70 @@ export class TelegramMirrorService {
   }
 
   /**
+   * Fetch recent N messages from a Telegram channel
+   */
+  async getChannelRecentMessages(channelIdentifier: string, limit = 5): Promise<Array<{
+    id: number
+    date: string
+    text: string
+    hasMedia: boolean
+    mediaType?: string
+    url?: string
+  }>> {
+    const cleanChan = channelIdentifier.replace(/^https?:\/\/t\.me\//, '').replace(/^@/, '').trim()
+
+    if (this.client && this.isRunning) {
+      try {
+        let entity: any = channelIdentifier
+        if (/^-?\d+$/.test(channelIdentifier)) {
+          entity = await this.client.getEntity(channelIdentifier)
+        } else {
+          entity = await this.client.getInputEntity(channelIdentifier)
+        }
+        const msgs = await this.client.getMessages(entity, { limit })
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          return msgs.map((m: any) => {
+            let mediaType: string | undefined = undefined
+            if (m.video || m.media?.document?.mimeType?.startsWith('video/')) mediaType = 'video'
+            else if (m.photo) mediaType = 'photo'
+            else if (m.media) mediaType = 'document'
+
+            return {
+              id: m.id,
+              date: m.date ? new Date(m.date * 1000).toISOString() : new Date().toISOString(),
+              text: m.message || (m.media ? '[多媒体内容]' : ''),
+              hasMedia: Boolean(m.media),
+              mediaType,
+              url: cleanChan ? `https://t.me/${cleanChan}/${m.id}` : undefined
+            }
+          })
+        }
+      } catch (e: any) {
+        console.warn(`[TelegramMirrorService] MTProto getMessages failed for ${channelIdentifier}:`, e.message)
+      }
+    }
+
+    // Fallback: load from botPosts store
+    const botPosts = appStore.getBotPosts()
+    const norm = cleanChan.toLowerCase()
+    const matched = botPosts
+      .filter((p) => {
+        const pNorm = p.chatId.replace(/^-100/, '').replace(/^@/, '').toLowerCase()
+        return !cleanChan || pNorm === norm || p.chatId.includes(norm)
+      })
+      .slice(0, limit)
+
+    return matched.map((p) => ({
+      id: p.messageId,
+      date: p.sentAt,
+      text: p.text,
+      hasMedia: p.mediaCount > 0,
+      mediaType: p.mediaType === 'video' ? 'video' : p.mediaType === 'photo' || p.mediaType === 'album' ? 'photo' : undefined,
+      url: p.postUrl
+    }))
+  }
+
+  /**
    * Fetch current Telegram user profile (displayName, avatarUrl)
    */
   async fetchUserProfile(account: Account): Promise<{ displayName?: string; avatarUrl?: string }> {

@@ -512,4 +512,64 @@ export function registerIpcHandlers(): void {
     telegramBotInteractiveService.stop()
     return true
   })
+
+  // --- Telegram Bot Pairing & Authorization ---
+  ipcMain.handle('telegram:bot-get-pairing-info', () => {
+    return {
+      pairingCode: appStore.getBotPairingCode(),
+      authorizedUserIds: appStore.getBotAuthorizedUserIds()
+    }
+  })
+
+  ipcMain.handle('telegram:bot-reset-pairing-code', () => {
+    return appStore.resetBotPairingCode()
+  })
+
+  ipcMain.handle('telegram:bot-revoke-user', (_, userId: number) => {
+    return appStore.revokeBotAuthorizedUserId(userId)
+  })
+
+  // --- App Version Info (Dynamic) ---
+  ipcMain.handle('app:get-version-info', () => {
+    const pkg = require('../../package.json')
+    return {
+      version: pkg.version || '0.2.2',
+      electron: process.versions.electron,
+      node: process.versions.node,
+      chrome: process.versions.chrome,
+      v8: process.versions.v8
+    }
+  })
+
+  // --- Recent Posts & Deletion Studio ---
+  ipcMain.handle('telegram:get-channel-recent', async (_, params?: { channelId?: string; limit?: number }) => {
+    const settings = appStore.getSettings()
+    const targetChat = params?.channelId || settings.defaultBotChatId || ''
+    return telegramMirrorService.getChannelRecentMessages(targetChat, params?.limit || 5)
+  })
+
+  ipcMain.handle('twitter:get-recent-tweets', async (_, params?: { accountId?: string; limit?: number }) => {
+    const acc = params?.accountId
+      ? appStore.getAccount(params.accountId)
+      : appStore.getAccounts().find((a) => a.platform === 'twitter' && a.status === 'active')
+    if (!acc) return []
+    return twitterDriver.fetchRecentTweetsForDeletion(acc, params?.limit || 5)
+  })
+
+  ipcMain.handle('twitter:delete-tweet', async (_, params: { accountId?: string; tweetId: string }) => {
+    const acc = params?.accountId
+      ? appStore.getAccount(params.accountId)
+      : appStore.getAccounts().find((a) => a.platform === 'twitter' && a.status === 'active')
+    if (!acc) return { success: false, error: 'No active Twitter account found' }
+    return twitterDriver.deleteTweet(acc, params.tweetId)
+  })
+
+  ipcMain.handle('telegram:delete-channel-post', async (_, params: { channelId?: string; messageId: number }) => {
+    const settings = appStore.getSettings()
+    const targetChat = params?.channelId || settings.defaultBotChatId || ''
+    return telegramBotDriver.deletePost({
+      chatId: targetChat,
+      messageId: params.messageId
+    })
+  })
 }

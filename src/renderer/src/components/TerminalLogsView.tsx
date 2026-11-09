@@ -23,8 +23,7 @@ interface TerminalLogsViewProps {
 }
 
 export const TerminalLogsView: React.FC<TerminalLogsViewProps> = ({ logs, onClearLogs }) => {
-  const { language } = useI18n()
-  const isZh = language === 'zh'
+  const { t } = useI18n()
   const [levelFilter, setLevelFilter] = useState<'all' | 'info' | 'warn' | 'error'>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
@@ -117,17 +116,15 @@ export const TerminalLogsView: React.FC<TerminalLogsViewProps> = ({ logs, onClea
           <div className="flex items-center gap-2.5">
             <h2 className="text-base font-semibold text-foreground font-mono tracking-tight flex items-center gap-2">
               <Terminal className="w-4 h-4 text-brand" />
-              <span>{isZh ? '系统运行控制台日志' : 'Terminal Console Logs'}</span>
+              <span>{t.terminal.title}</span>
             </h2>
             <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>{isZh ? '实时输出' : 'LIVE CONSOLE'}</span>
+              <span>{t.terminal.liveConsole}</span>
             </span>
           </div>
           <p className="text-xs text-gray-500 font-mono mt-0.5">
-            {isZh
-              ? '捕获并实时输出 Rosetta 主进程与网络驱动的所有运行调试信息与请求流水'
-              : 'Live stream of Rosetta main process, MTProto socket, and Twitter driver console outputs'}
+            {t.terminal.desc}
           </p>
         </div>
 
@@ -136,28 +133,28 @@ export const TerminalLogsView: React.FC<TerminalLogsViewProps> = ({ logs, onClea
           <button
             onClick={handleCopyAll}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-border text-gray-700 hover:text-foreground hover:bg-surface-hover transition-all bg-surface shadow-panel active:scale-95"
-            title={isZh ? '复制筛选日志' : 'Copy Filtered Logs'}
+            title={t.terminal.copyAll}
           >
             {copiedAll ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-gray-500" />}
-            <span>{copiedAll ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制内容' : 'Copy All')}</span>
+            <span>{copiedAll ? t.terminal.copied : t.terminal.copyAll}</span>
           </button>
 
           <button
             onClick={handleExport}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-border text-gray-700 hover:text-foreground hover:bg-surface-hover transition-all bg-surface shadow-panel active:scale-95"
-            title={isZh ? '导出为文件' : 'Export Logs'}
+            title={t.terminal.export}
           >
             <Download className="w-3.5 h-3.5 text-gray-500" />
-            <span>{isZh ? '导出' : 'Export'}</span>
+            <span>{t.terminal.export}</span>
           </button>
 
           <button
             onClick={onClearLogs}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-border text-gray-600 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-all bg-surface shadow-panel active:scale-95"
-            title={isZh ? '清空控制台' : 'Clear Logs'}
+            title={t.terminal.clear}
           >
             <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-rose-600" />
-            <span>{isZh ? '清空' : 'Clear'}</span>
+            <span>{t.terminal.clear}</span>
           </button>
         </div>
       </div>
@@ -167,7 +164,7 @@ export const TerminalLogsView: React.FC<TerminalLogsViewProps> = ({ logs, onClea
         {/* Level Filters */}
         <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
           {[
-            { id: 'all', label: isZh ? '全部' : 'ALL', count: logs.length },
+            { id: 'all', label: t.terminal.all, count: logs.length },
             { id: 'info', label: 'INFO', count: countInfo, badge: 'text-sky-700 bg-sky-50 border-sky-200' },
             { id: 'warn', label: 'WARN', count: countWarn, badge: 'text-amber-700 bg-amber-50 border-amber-200' },
             { id: 'error', label: 'ERROR', count: countError, badge: 'text-rose-700 bg-rose-50 border-rose-200' }
@@ -208,7 +205,7 @@ export const TerminalLogsView: React.FC<TerminalLogsViewProps> = ({ logs, onClea
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={isZh ? '搜索控制台关键字...' : 'Search logs...'}
+              placeholder={t.terminal.filterPlaceholder}
               className="w-full bg-background border border-surface-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-foreground font-mono focus:outline-hidden focus:border-brand focus:ring-1 focus:ring-brand/30 transition-all shadow-2xs"
             />
           </div>
@@ -220,10 +217,10 @@ export const TerminalLogsView: React.FC<TerminalLogsViewProps> = ({ logs, onClea
                 ? 'bg-brand-subtle text-brand border-brand-border font-semibold shadow-2xs'
                 : 'bg-surface border-surface-border text-gray-500 hover:text-foreground'
             }`}
-            title={autoScroll ? (isZh ? '点击暂停自动滚动' : 'Pause Auto-scroll') : (isZh ? '点击恢复自动滚动' : 'Resume Auto-scroll')}
+            title={autoScroll ? t.terminal.follow : t.terminal.paused}
           >
             {autoScroll ? <ArrowDownCircle className="w-3.5 h-3.5 text-brand" /> : <PauseCircle className="w-3.5 h-3.5" />}
-            <span className="hidden md:inline">{autoScroll ? (isZh ? '滚屏锁定' : 'Follow') : (isZh ? '已暂停' : 'Paused')}</span>
+            <span className="hidden md:inline">{autoScroll ? t.terminal.follow : t.terminal.paused}</span>
           </button>
         </div>
       </div>
@@ -242,7 +239,7 @@ export const TerminalLogsView: React.FC<TerminalLogsViewProps> = ({ logs, onClea
           </div>
 
           <div className="flex items-center gap-3 text-[10px] text-[#8C827A]">
-            <span>{isZh ? `匹配: ${filteredLogs.length} 行` : `${filteredLogs.length} lines`}</span>
+            <span>{`${t.terminal.showing}: ${filteredLogs.length} / ${logs.length}`}</span>
             <span>•</span>
             <span className="flex items-center gap-1 text-emerald-400">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -299,9 +296,7 @@ export const TerminalLogsView: React.FC<TerminalLogsViewProps> = ({ logs, onClea
             <div className="py-24 flex flex-col items-center justify-center text-center text-[#786E65] space-y-2 select-none font-mono">
               <Terminal className="w-8 h-8 opacity-40 text-brand" />
               <p className="text-xs">
-                {isZh
-                  ? '暂无捕获到的系统控制台日志，或未匹配到搜索关键词'
-                  : 'No terminal logs captured yet or matching your filter'}
+                {t.terminal.noLogs}
               </p>
             </div>
           )}

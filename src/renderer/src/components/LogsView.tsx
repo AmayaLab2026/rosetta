@@ -61,7 +61,7 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
             <h2 className="text-base font-semibold text-foreground font-mono tracking-tight">{t.logs.title}</h2>
             <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>实时流就绪</span>
+              <span>{t.logs.liveStreamReady}</span>
             </span>
           </div>
           <p className="text-xs text-gray-500 font-mono mt-0.5">
@@ -159,7 +159,7 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
                   {log.mediaCount > 0 && (
                     <span className="inline-flex items-center gap-1 text-[10px] text-gray-600 bg-surface-muted px-1.5 py-0.5 rounded border border-surface-border">
                       <ImageIcon className="w-3 h-3 text-brand" />
-                      <span>{log.mediaCount} 项附件</span>
+                      <span>{`${log.mediaCount} ${t.logs.attachmentsCount}`}</span>
                     </span>
                   )}
 
@@ -178,7 +178,7 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
                       </span>
-                      <span>处理中...</span>
+                      <span>{t.logs.filterProcessing}...</span>
                     </span>
                   )}
                   {log.status === 'success' && (
@@ -239,12 +239,12 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
                       {copiedId === `orig_${log.id}` ? (
                         <>
                           <Check className="w-3 h-3 text-emerald-600" />
-                          <span className="text-emerald-700 text-[10px]">已复制</span>
+                          <span className="text-emerald-700 text-[10px]">{t.logs.copied}</span>
                         </>
                       ) : (
                         <>
                           <Copy className="w-3 h-3" />
-                          <span>复制</span>
+                          <span>{t.logs.copy}</span>
                         </>
                       )}
                     </button>
@@ -264,12 +264,12 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
                         {copiedId === `proc_${log.id}` ? (
                           <>
                             <Check className="w-3 h-3 text-emerald-600" />
-                            <span className="text-emerald-700 text-[10px]">已复制</span>
+                            <span className="text-emerald-700 text-[10px]">{t.logs.copied}</span>
                           </>
                         ) : (
                           <>
                             <Copy className="w-3 h-3" />
-                            <span>复制</span>
+                            <span>{t.logs.copy}</span>
                           </>
                         )}
                       </button>
@@ -280,7 +280,7 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
 
                 {log.errorMessage && (
                   <div className="text-rose-900 text-[11px] bg-rose-50/80 p-2.5 rounded-lg border border-rose-200 font-mono">
-                    <span className="font-semibold block mb-0.5 text-rose-700">错误详情:</span>
+                    <span className="font-semibold block mb-0.5 text-rose-700">{t.logs.errorDetail}</span>
                     <span className="select-text">{log.errorMessage}</span>
                   </div>
                 )}

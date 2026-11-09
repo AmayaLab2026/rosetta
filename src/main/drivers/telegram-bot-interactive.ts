@@ -1,6 +1,7 @@
 import { appStore } from '../storage/store'
 import { twitterDriver } from './twitter'
 import { telegramBotDriver } from './telegram-bot'
+import { telegramMirrorService } from '../mirror/telegram-listener'
 import { MirrorLogItem } from '../../shared/types'
 import { BrowserWindow } from 'electron'
 
@@ -138,6 +139,12 @@ export class TelegramBotInteractiveService {
 
       if (!fromId) return
 
+      // Security check for unauthorized user clicks
+      if (!appStore.isBotUserAuthorized(fromId)) {
+        await this.sendMessage(baseUrl, fromId, '🔒 <b>未授权访问</b>\n请在私聊中直接发送 Rosetta 桌面端显示的 6 位匹配码完成配对。', { parse_mode: 'HTML' })
+        return
+      }
+
       let session = this.userSessions.get(fromId)
       if (!session) {
         session = {
@@ -190,6 +197,125 @@ export class TelegramBotInteractiveService {
         return
       }
 
+      // Delete Menu
+      if (data === 'menu_delete') {
+        await this.sendMessage(baseUrl, fromId, '🗑️ <b>请选择需要查看并撤回的历史平台：</b>\n（每次获取最近 5 条已发布贴文）', {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '✈️ 查看电报频道历史 (最近5条)', callback_data: 'del_hist_tg' },
+                { text: '𝕏 查看推特推文历史 (最近5条)', callback_data: 'del_hist_tw' }
+              ],
+              [
+                { text: '🔙 返回主菜单', callback_data: 'action_cancel' }
+              ]
+            ]
+          }
+        })
+        return
+      }
+
+      // Get Telegram 5 recent posts and allow deletion
+      if (data === 'del_hist_tg') {
+        const settings = appStore.getSettings()
+        const targetChat = settings.defaultBotChatId || ''
+        const posts = await telegramMirrorService.getChannelRecentMessages(targetChat, 5)
+
+        if (posts.length === 0) {
+          await this.sendMessage(baseUrl, fromId, `⚠️ 暂未查询到频道 <code>${targetChat || '默认频道'}</code> 的历史消息。`, { parse_mode: 'HTML' })
+          return
+        }
+
+        await this.sendMessage(baseUrl, fromId, `📋 <b>电报频道 ${targetChat} 最近 5 条贴文：</b>\n点击下方按钮可直接远程撤回：`, { parse_mode: 'HTML' })
+        for (const p of posts) {
+          const preview = p.text.length > 60 ? `${p.text.slice(0, 60)}...` : p.text || (p.hasMedia ? '[多媒体内容]' : '')
+          await this.sendMessage(
+            baseUrl,
+            fromId,
+            `📌 <b>消息 #${p.id}</b> (${new Date(p.date).toLocaleTimeString()})\n<blockquote>${this.escapeHtml(preview)}</blockquote>`,
+            {
+              parse_mode: 'HTML',
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    { text: `🗑️ 撤回删除此消息 (#${p.id})`, callback_data: `do_del_tg_${p.id}` }
+                  ]
+                ]
+              }
+            }
+          )
+        }
+        return
+      }
+
+      // Get Twitter 5 recent tweets and allow deletion
+      if (data === 'del_hist_tw') {
+        const activeTwAcc = appStore.getAccounts().find((a) => a.platform === 'twitter' && a.status === 'active')
+        if (!activeTwAcc) {
+          await this.sendMessage(baseUrl, fromId, '⚠️ 未在 Rosetta 中绑定活跃的 X / Twitter 账号。')
+          return
+        }
+
+        const tweets = await twitterDriver.fetchRecentTweetsForDeletion(activeTwAcc, 5)
+        if (tweets.length === 0) {
+          await this.sendMessage(baseUrl, fromId, `⚠️ 暂未获取到 @${activeTwAcc.username} 的最近推文记录。`)
+          return
+        }
+
+        await this.sendMessage(baseUrl, fromId, `📋 <b>Twitter @${activeTwAcc.username} 最近 5 条推文：</b>\n点击下方按钮可直接在 X 上删除：`, { parse_mode: 'HTML' })
+        for (const tw of tweets) {
+          const preview = tw.text.length > 60 ? `${tw.text.slice(0, 60)}...` : tw.text
+          await this.sendMessage(
+            baseUrl,
+            fromId,
+            `📌 <b>推文 #${tw.id}</b> (${new Date(tw.createdAt).toLocaleTimeString()})\n<blockquote>${this.escapeHtml(preview)}</blockquote>`,
+            {
+              parse_mode: 'HTML',
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    { text: `🗑️ 删除此推文 (#${tw.id})`, callback_data: `do_del_tw_${tw.id}` }
+                  ]
+                ]
+              }
+            }
+          )
+        }
+        return
+      }
+
+      // Execute TG Message Revoke
+      if (data.startsWith('do_del_tg_')) {
+        const msgId = parseInt(data.replace('do_del_tg_', ''), 10)
+        const settings = appStore.getSettings()
+        const targetChat = settings.defaultBotChatId || ''
+        const res = await telegramBotDriver.deletePost({ chatId: targetChat, messageId: msgId, botToken: token })
+        if (res.success) {
+          await this.sendMessage(baseUrl, fromId, `✅ 已成功从电报频道撤回删除消息 #${msgId}！`)
+        } else {
+          await this.sendMessage(baseUrl, fromId, `❌ 撤回消息 #${msgId} 失败：${res.error}`)
+        }
+        return
+      }
+
+      // Execute Twitter Tweet Revoke
+      if (data.startsWith('do_del_tw_')) {
+        const tweetId = data.replace('do_del_tw_', '')
+        const activeTwAcc = appStore.getAccounts().find((a) => a.platform === 'twitter' && a.status === 'active')
+        if (!activeTwAcc) {
+          await this.sendMessage(baseUrl, fromId, '⚠️ 未找到活跃的 Twitter 账号。')
+          return
+        }
+        const res = await twitterDriver.deleteTweet(activeTwAcc, tweetId)
+        if (res.success) {
+          await this.sendMessage(baseUrl, fromId, `✅ 已成功从 X (Twitter) 删除推文 #${tweetId}！`)
+        } else {
+          await this.sendMessage(baseUrl, fromId, `❌ 删除推文 #${tweetId} 失败：${res.error}`)
+        }
+        return
+      }
+
       return
     }
 
@@ -201,6 +327,42 @@ export class TelegramBotInteractiveService {
       const text = (msg.text || msg.caption || '').trim()
 
       if (!fromId || !chatId) return
+
+      // --- Security & Pairing Code Verification ---
+      const isAuthorized = appStore.isBotUserAuthorized(fromId)
+      if (!isAuthorized) {
+        const pairingCode = appStore.getBotPairingCode().trim()
+        if (text && text.toLowerCase() === pairingCode.toLowerCase()) {
+          appStore.addBotAuthorizedUserId(fromId)
+          console.log(`[TelegramBotInteractive] User #${fromId} successfully paired with matching code!`)
+
+          const successMsg = `🎉 <b>配对成功！身份已通过安全校验并永久授权。</b>\n\n你的 Telegram User ID: <code>${fromId}</code>\n本端已记住你的身份，后续发帖无需重复校验密码。\n\n请在下方点击选择本次发布的<b>目标平台</b>：`
+
+          await this.sendMessage(baseUrl, fromId, successMsg, {
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: '𝕏 仅发往 Twitter (X)', callback_data: 'mode_twitter' },
+                  { text: '✈️ 仅发往 Telegram 频道', callback_data: 'mode_telegram' }
+                ],
+                [
+                  { text: '⚡ 两端同时广播 (X + TG)', callback_data: 'mode_both' }
+                ],
+                [
+                  { text: '🗑️ 撤回/删除历史贴文 (每次5条)', callback_data: 'menu_delete' }
+                ]
+              ]
+            }
+          })
+          return
+        }
+
+        // Prompt for pairing code
+        const lockMsg = `🔒 <b>Rosetta 主控端安全校验</b>\n\n该机器人已开启身份保护，防止未授权人员使用。\n\n首次使用请输入 Rosetta 桌面端生成的 <b>6位匹配授权码</b>：\n<i>（打开电脑端 Rosetta ➔「电报机器人」即可看到匹配码）</i>`
+        await this.sendMessage(baseUrl, fromId, lockMsg, { parse_mode: 'HTML' })
+        return
+      }
 
       let session = this.userSessions.get(fromId)
       if (!session) {
@@ -220,12 +382,31 @@ export class TelegramBotInteractiveService {
         return
       }
 
+      // Command: /delete
+      if (text === '/delete' || text.startsWith('/delete')) {
+        await this.sendMessage(baseUrl, fromId, '🗑️ <b>请选择需要查看并撤回的历史平台：</b>\n（每次获取最近 5 条已发布贴文）', {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '✈️ 查看电报频道历史 (最近5条)', callback_data: 'del_hist_tg' },
+                { text: '𝕏 查看推特推文历史 (最近5条)', callback_data: 'del_hist_tw' }
+              ],
+              [
+                { text: '🔙 取消', callback_data: 'action_cancel' }
+              ]
+            ]
+          }
+        })
+        return
+      }
+
       // Command: /start or /help
       if (text === '/start' || text.startsWith('/start') || text === '/help') {
         session.step = 'idle'
         session.content = { text: '', mediaFiles: [] }
 
-        const welcomeText = `👋 <b>欢迎使用 Rosetta 社交同步中枢机器人！</b>\n\n你可以直接在此私聊中发送图文或视频，由机器人代发至你的 <b>Telegram 频道</b> 或 <b>Twitter (X)</b>。\n\n请在下方点击选择本次发布的<b>目标平台</b>：`
+        const welcomeText = `👋 <b>欢迎使用 Rosetta 社交同步中枢机器人！</b>\n\n你可以直接在此私聊中发送图文或视频，由机器人代发至你的 <b>Telegram 频道</b> 或 <b>Twitter (X)</b>。\n\n请在下方点击选择操作：`
 
         await this.sendMessage(baseUrl, fromId, welcomeText, {
           parse_mode: 'HTML',
@@ -237,6 +418,9 @@ export class TelegramBotInteractiveService {
               ],
               [
                 { text: '⚡ 两端同时广播 (X + TG)', callback_data: 'mode_both' }
+              ],
+              [
+                { text: '🗑️ 撤回/删除历史贴文 (每次5条)', callback_data: 'menu_delete' }
               ],
               [
                 { text: '❌ 取消 / 重置', callback_data: 'action_cancel' }

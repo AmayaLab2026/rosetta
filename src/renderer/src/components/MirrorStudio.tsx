@@ -212,7 +212,7 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
             {totalProcessing > 0 && (
               <span className="flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                <span>{totalProcessing} 条处理中</span>
+                <span>{`${totalProcessing} ${t.logs.filterProcessing}`}</span>
               </span>
             )}
           </div>
@@ -254,7 +254,7 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
                       {log.mediaCount > 0 && (
                         <span className="inline-flex items-center gap-1 text-[10px] text-gray-600 bg-surface px-1.5 py-0.5 rounded border border-surface-border">
                           <ImageIcon className="w-3 h-3 text-brand" />
-                          <span>{log.mediaCount} 项附件</span>
+                          <span>{`${log.mediaCount} ${t.logs.attachmentsCount}`}</span>
                         </span>
                       )}
 
@@ -273,7 +273,7 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
                           </span>
-                          <span>同步处理中...</span>
+                          <span>{t.studio.processing}</span>
                         </span>
                       )}
                       {log.status === 'success' && (

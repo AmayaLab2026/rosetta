@@ -36,18 +36,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
   const [saveToast, setSaveToast] = useState(false)
   const [clearingLogs, setClearingLogs] = useState(false)
   const [destroying, setDestroying] = useState(false)
+  const [versionInfo, setVersionInfo] = useState<{
+    version: string
+    electron: string
+    node: string
+    chrome: string
+    v8: string
+  }>({
+    version: '0.2.3',
+    electron: '33.4',
+    node: '20',
+    chrome: '',
+    v8: ''
+  })
 
   const loadSettings = async () => {
     try {
       if (!window.rosetta) return
-      const [storedSettings, loginItem] = await Promise.all([
+      const [storedSettings, loginItem, verInfo] = await Promise.all([
         window.rosetta.getSettings(),
-        window.rosetta.getLoginItemSettings().catch(() => ({ openAtLogin: false }))
+        window.rosetta.getLoginItemSettings().catch(() => ({ openAtLogin: false })),
+        window.rosetta.getAppVersionInfo?.().catch(() => null)
       ])
       setSettings({
         ...storedSettings,
         openAtLogin: loginItem.openAtLogin ?? storedSettings.openAtLogin ?? false
       })
+      if (verInfo) setVersionInfo(verInfo)
     } catch (e) {
       console.error('[Settings] Failed to load settings:', e)
     } finally {
@@ -303,7 +318,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
             <div className="bg-surface-muted/50 border border-surface-border/70 rounded-lg p-3">
               <div className="text-[10px] text-gray-400 font-sans uppercase">API ID</div>
               <div className="text-foreground font-semibold mt-1">
-                {settings.telegramApiId || (tgAccount?.config as any)?.apiId || '未配置'}
+                {settings.telegramApiId || (tgAccount?.config as any)?.apiId || st.notConfigured}
               </div>
             </div>
 
@@ -312,14 +327,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
               <div className="text-foreground font-semibold mt-1">
                 {settings.telegramApiHash
                   ? `${settings.telegramApiHash.substring(0, 4)}••••••••`
-                  : '未配置'}
+                  : st.notConfigured}
               </div>
             </div>
 
             <div className="bg-surface-muted/50 border border-surface-border/70 rounded-lg p-3">
-              <div className="text-[10px] text-gray-400 font-sans uppercase">关联手机号</div>
+              <div className="text-[10px] text-gray-400 font-sans uppercase">{st.boundPhone}</div>
               <div className="text-foreground font-semibold mt-1">
-                {settings.telegramPhone || tgAccount?.displayName || '未配置'}
+                {settings.telegramPhone || tgAccount?.displayName || st.notConfigured}
               </div>
             </div>
           </div>
@@ -388,7 +403,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
               className="inline-flex items-center gap-2 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-medium rounded-lg transition-colors shadow-2xs disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4 text-rose-600" />
-              {clearingLogs ? '正在清理...' : st.clearLogs || '清空所有流水日志'}
+              {clearingLogs ? st.clearing : (st.clearLogs || '清空所有流水日志')}
             </button>
           </div>
         </section>
@@ -402,7 +417,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
                 {st.aboutSection || '关于 Rosetta'}
               </h2>
               <p className="text-[11px] text-gray-500">
-                Desktop Multi-channel Social Dispatcher & TG Mirror Workstation
+                {st.aboutDesc || 'Desktop Multi-channel Social Dispatcher & TG Mirror Workstation'}
               </p>
             </div>
           </div>
@@ -411,12 +426,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
             <div className="space-y-1 text-xs">
               <div className="text-foreground font-semibold flex items-center gap-2">
                 <span>Rosetta</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-brand/10 text-brand border border-brand/20">
-                  v0.1.0-alpha
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-brand-subtle text-brand border border-brand-border/60 font-bold">
+                  v{versionInfo.version}
                 </span>
               </div>
-              <div className="text-[11px] text-gray-500 font-sans">
-                Electron 31 • React 18 • Vite 5 • GramJS MTProto • Tailwind CSS
+              <div className="text-[11px] text-gray-500 font-mono">
+                Electron {versionInfo.electron ? versionInfo.electron.split('.')[0] : '33'} • Node {versionInfo.node ? versionInfo.node.split('.')[0] : '20'} • React 18 • Vite 6 • GramJS MTProto • Tailwind CSS
               </div>
             </div>
 
