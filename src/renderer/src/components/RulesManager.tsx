@@ -321,7 +321,7 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
             key={rule.id}
             className={`p-4 rounded-xl bg-surface border transition-all shadow-panel ${
               rule.enabled
-                ? 'border-surface-border hover:border-gray-400'
+                ? 'border-surface-border hover:border-gray-400 surface-hover-card'
                 : 'border-surface-border/60 opacity-60 bg-surface-muted/30'
             }`}
           >
@@ -330,10 +330,10 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
                 <div className="flex items-center gap-2.5">
                   <h4 className="text-xs font-semibold text-foreground font-mono">{rule.name}</h4>
                   <span
-                    className={`text-[10px] font-mono px-2 py-0.2 rounded ${
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full border shadow-2xs font-medium ${
                       rule.enabled
-                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                        : 'bg-surface-muted text-gray-500 border border-surface-border'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                        : 'bg-surface-muted text-gray-500 border-surface-border'
                     }`}
                   >
                     {rule.enabled ? t.rules.active : t.rules.paused}
@@ -341,20 +341,20 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 text-xs font-mono text-gray-500">
-                  <span className="text-telegram font-medium">{rule.sourceChannel.username}</span>
-                  <ArrowRight className="w-3 h-3 text-gray-400" />
-                  <span className="text-gray-800 font-medium">
+                  <span className="text-telegram font-semibold bg-telegram-subtle px-1.5 py-0.5 rounded border border-telegram-border/50 text-[11px]">{rule.sourceChannel.username}</span>
+                  <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />
+                  <span className="text-gray-800 font-semibold text-[11px]">
                     @{rule.targetAccount.accountName || rule.targetAccount.accountId}
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
                 <button
                   onClick={() => handleToggle(rule.id, rule.enabled)}
-                  className={`px-3 py-1 rounded text-xs font-mono transition-colors border ${
+                  className={`px-3 py-1 rounded-lg text-xs font-mono transition-all border shadow-2xs font-medium active:scale-95 ${
                     rule.enabled
-                      ? 'bg-surface text-gray-700 border-surface-border hover:bg-surface-hover'
+                      ? 'bg-surface text-gray-700 border-surface-border hover:bg-surface-hover hover:border-gray-300'
                       : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
                   }`}
                 >
@@ -363,7 +363,8 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
 
                 <button
                   onClick={() => handleDelete(rule.id)}
-                  className="p-1.5 rounded text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
+                  title="删除规则"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

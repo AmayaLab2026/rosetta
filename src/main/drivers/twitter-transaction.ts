@@ -296,3 +296,23 @@ export async function generateTwitterTransactionId(method: string, path: string)
     return ''
   }
 }
+
+/**
+ * Pre-warm the Twitter transaction key in the background to ensure instant zero-latency signing
+ */
+export async function prewarmTwitterTransaction(): Promise<boolean> {
+  const now = Date.now()
+  if (cachedSession && now - cachedSession.timestamp < 8 * 60 * 1000) {
+    return true
+  }
+  try {
+    const tid = await generateTwitterTransactionId('POST', '/i/api/graphql/UecQIuYzi2MCOah7-eOpcQ/CreateTweet')
+    if (tid) {
+      console.log('[TwitterTransaction] Key successfully pre-warmed for instant signing.')
+      return true
+    }
+  } catch (err) {
+    console.warn('[TwitterTransaction] Pre-warm failed:', err)
+  }
+  return false
+}

@@ -36,6 +36,42 @@
   50% { opacity: 0.7; transform: scale(0.97); }
 }
 
+@keyframes stream-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes flow-line {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 .animate-pulse-subtle {
   animation: pulse-subtle 2s infinite ease-in-out;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, rgba(204, 120, 92, 0.05) 0%, rgba(204, 120, 92, 0.22) 50%, rgba(204, 120, 92, 0.05) 100%);
+  background-size: 200% 100%;
+  animation: stream-shimmer 2s infinite;
+}
+
+.animate-flow-line {
+  animation: flow-line 1.8s infinite linear;
+}
+
+/* Glass & Card Micro-enhancements */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.surface-hover-card {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.surface-hover-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px -4px rgba(31, 30, 29, 0.08), 0 2px 6px -2px rgba(31, 30, 29, 0.04);
 }

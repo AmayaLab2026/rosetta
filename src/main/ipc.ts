@@ -199,37 +199,44 @@ export function registerIpcHandlers(): void {
         continue
       }
 
+      const startTime = Date.now()
       const logId = `log_composer_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+      const hasMedia = payload.mediaFiles && payload.mediaFiles.length > 0
       const logItem: MirrorLogItem = {
         id: logId,
         timestamp: new Date().toISOString(),
         ruleId: 'composer',
         sourceChannel: '统一发帖器 (Composer)',
         targetPlatform: target.platform,
-        originalText: payload.text || (payload.mediaFiles?.length ? `[多媒体消息 - 共 ${payload.mediaFiles.length} 项]` : '(Media Post)'),
-        processedText: '正在发布...',
+        originalText: payload.text || (hasMedia ? `[多媒体消息 - 共 ${payload.mediaFiles!.length} 项]` : '(Media Post)'),
+        processedText: hasMedia ? `正在并发上传 ${payload.mediaFiles!.length} 项附件并发布...` : '正在同步至 X / Twitter...',
         mediaCount: payload.mediaFiles?.length || 0,
         status: 'processing'
       }
 
       appStore.addLog(logItem)
       const { BrowserWindow } = require('electron')
-      BrowserWindow.getAllWindows().forEach((win: any) => win.webContents.send('mirror:log-added', logItem))
+      BrowserWindow.getAllWindows().forEach((win: any) => {
+        if (!win.isDestroyed() && win.webContents) {
+          win.webContents.send('mirror:log-added', logItem)
+        }
+      })
 
       if (target.platform === 'twitter') {
-        // Upload any attached media files
+        // Upload attached media files concurrently for ultra-fast response
         const mediaIds: string[] = []
-        if (payload.mediaFiles && payload.mediaFiles.length > 0) {
-          for (const file of payload.mediaFiles) {
-            try {
-              const uploadRes = await twitterDriver.uploadMedia(account, file.dataBase64, file.type)
-              if (uploadRes.success && uploadRes.mediaId) {
-                mediaIds.push(uploadRes.mediaId)
-              }
-            } catch (err: any) {
-              console.warn('[Composer] Failed to upload media:', err)
-            }
-          }
+        if (hasMedia) {
+          const uploadPromises = payload.mediaFiles!.map((file) =>
+            twitterDriver
+              .uploadMedia(account, file.dataBase64, file.type)
+              .then((res) => (res.success && res.mediaId ? res.mediaId : null))
+              .catch((err: any) => {
+                console.warn('[Composer] Failed to upload media:', err)
+                return null
+              })
+          )
+          const uploaded = await Promise.all(uploadPromises)
+          mediaIds.push(...uploaded.filter((id): id is string => Boolean(id)))
         }
 
         const res = await twitterDriver.publishPostWithMedia(
@@ -240,13 +247,19 @@ export function registerIpcHandlers(): void {
         )
         results.push({ platform: 'twitter', ...res })
 
-        // Update log with result
+        // Update log with result and measured latency
+        const durationMs = Date.now() - startTime
         logItem.status = res.success ? 'success' : 'failed'
         logItem.processedText = res.success ? payload.text : ''
         logItem.errorMessage = res.error
         logItem.targetUrl = res.url
+        logItem.durationMs = durationMs
         appStore.addLog(logItem)
-        BrowserWindow.getAllWindows().forEach((win: any) => win.webContents.send('mirror:log-added', logItem))
+        BrowserWindow.getAllWindows().forEach((win: any) => {
+          if (!win.isDestroyed() && win.webContents) {
+            win.webContents.send('mirror:log-added', logItem)
+          }
+        })
       }
     }
 

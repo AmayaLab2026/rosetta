@@ -43,10 +43,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => onSelectTab(item.id)}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-all duration-150 ${
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 ${
                 isActive
-                  ? 'bg-brand-subtle text-brand border border-brand-border font-semibold shadow-sm'
-                  : 'text-gray-600 hover:text-foreground hover:bg-surface-hover'
+                  ? 'bg-brand-subtle text-brand border border-brand-border font-semibold shadow-2xs'
+                  : 'text-gray-600 hover:text-foreground hover:bg-surface-hover border border-transparent'
               }`}
             >
               <div className="flex items-center gap-2.5">
@@ -59,8 +59,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               {typeof item.count === 'number' && item.count > 0 && (
                 <span
-                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
-                    isActive ? 'bg-brand/15 text-brand font-semibold' : 'bg-surface-border text-gray-600'
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold transition-all ${
+                    isActive ? 'bg-brand/15 text-brand shadow-2xs' : 'bg-surface border border-surface-border text-gray-500'
                   }`}
                 >
                   {item.count}

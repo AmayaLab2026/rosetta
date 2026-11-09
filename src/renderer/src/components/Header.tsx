@@ -9,22 +9,23 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  engineRunning,
   activeRulesCount,
   activeAccountsCount
 }) => {
   const { language, setLanguage, t } = useI18n()
 
   return (
-    <header className="h-14 border-b border-surface-border bg-surface/90 backdrop-blur-md px-5 flex items-center justify-between select-none">
+    <header className="h-14 border-b border-surface-border bg-surface/90 backdrop-blur-md px-5 flex items-center justify-between select-none shadow-2xs">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg overflow-hidden border border-surface-border shadow-sm flex items-center justify-center bg-white shrink-0">
+          <div className="w-7 h-7 rounded-lg overflow-hidden border border-surface-border shadow-2xs flex items-center justify-center bg-white shrink-0">
             <img src={logoImg} alt="Rosetta Logo" className="w-full h-full object-cover" />
           </div>
           <span className="font-semibold text-sm tracking-tight text-foreground font-mono">
             Rosetta
           </span>
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-surface-muted text-gray-600 border border-surface-border">
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-surface-muted text-gray-600 border border-surface-border shadow-2xs">
             {t.header.subtitle}
           </span>
         </div>
@@ -54,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => setLanguage('zh')}
             className={`px-2.5 py-0.5 rounded-full transition-all duration-200 text-xs font-medium flex items-center gap-1 ${
               language === 'zh'
-                ? 'bg-surface text-brand font-semibold shadow-sm border border-brand-border/40'
+                ? 'bg-surface text-brand font-semibold shadow-2xs border border-brand-border/40'
                 : 'text-gray-500 hover:text-foreground'
             }`}
           >
@@ -64,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => setLanguage('en')}
             className={`px-2.5 py-0.5 rounded-full transition-all duration-200 text-xs font-medium flex items-center gap-1 ${
               language === 'en'
-                ? 'bg-surface text-brand font-semibold shadow-sm border border-brand-border/40'
+                ? 'bg-surface text-brand font-semibold shadow-2xs border border-brand-border/40'
                 : 'text-gray-500 hover:text-foreground'
             }`}
           >
@@ -73,12 +74,32 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Engine Always-On Status Badge */}
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-sm">
+        <div
+          className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-medium border shadow-2xs transition-colors ${
+            engineRunning
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+              : 'bg-surface-muted text-gray-600 border-surface-border'
+          }`}
+        >
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600" />
+            {engineRunning && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            )}
+            <span
+              className={`relative inline-flex rounded-full h-2 w-2 ${
+                engineRunning ? 'bg-emerald-600' : 'bg-gray-400'
+              }`}
+            />
           </span>
-          <span>{language === 'zh' ? '引擎就绪·实时监听中' : 'Engine Active & Listening'}</span>
+          <span>
+            {engineRunning
+              ? language === 'zh'
+                ? '引擎就绪·实时监听中'
+                : 'Engine Active & Listening'
+              : language === 'zh'
+              ? '引擎未启动'
+              : 'Engine Idle'}
+          </span>
         </div>
       </div>
     </header>

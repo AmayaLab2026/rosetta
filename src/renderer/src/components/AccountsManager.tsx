@@ -238,16 +238,16 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
         </div>
 
         {twitterAccount ? (
-          <div className="p-3.5 rounded-lg bg-surface-muted/50 border border-surface-border flex items-center justify-between">
+          <div className="p-4 rounded-xl bg-surface-muted/60 border border-surface-border flex items-center justify-between shadow-2xs surface-hover-card">
             <div className="flex items-center gap-3">
               {twitterAccount.avatarUrl ? (
                 <img
                   src={twitterAccount.avatarUrl}
                   alt={twitterAccount.username}
-                  className="w-10 h-10 rounded-full border border-surface-border object-cover"
+                  className="w-10 h-10 rounded-full border border-surface-border object-cover shadow-2xs"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-brand-subtle text-brand flex items-center justify-center font-bold text-sm">
+                <div className="w-10 h-10 rounded-full bg-brand-subtle text-brand flex items-center justify-center font-bold text-sm border border-brand-border/60">
                   {twitterAccount.username[0]?.toUpperCase()}
                 </div>
               )}
@@ -258,13 +258,13 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
             </div>
 
             <span
-              className={`text-[11px] font-mono px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+              className={`text-[11px] font-mono px-2.5 py-0.5 rounded-full border shadow-2xs flex items-center gap-1 font-medium ${
                 twitterAccount.status === 'active'
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                   : 'bg-rose-50 text-rose-800 border-rose-300'
               }`}
             >
-              <CheckCircle2 className="w-3 h-3" />
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
               {twitterAccount.status === 'active' ? t.accounts.sessionActive : t.accounts.sessionExpired}
             </span>
           </div>
@@ -371,13 +371,13 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
         </div>
 
         {telegramAccount ? (
-          <div className="p-3.5 rounded-lg bg-surface-muted/50 border border-surface-border flex items-center justify-between">
+          <div className="p-4 rounded-xl bg-surface-muted/60 border border-surface-border flex items-center justify-between shadow-2xs surface-hover-card">
             <div className="flex items-center gap-3">
               {telegramAccount.avatarUrl ? (
                 <img
                   src={telegramAccount.avatarUrl}
                   alt={telegramAccount.username}
-                  className="w-10 h-10 rounded-full border border-surface-border object-cover shadow-xs"
+                  className="w-10 h-10 rounded-full border border-surface-border object-cover shadow-2xs"
                 />
               ) : (
                 <div className="w-10 h-10 rounded-full bg-telegram/15 text-telegram flex items-center justify-center font-bold text-sm border border-telegram/20">
@@ -390,8 +390,8 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
               </div>
             </div>
 
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" />
+            <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs flex items-center gap-1 font-medium">
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
               {t.accounts.connectedMtproto}
             </span>
           </div>

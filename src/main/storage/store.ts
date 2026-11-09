@@ -62,11 +62,43 @@ export class AppStore {
     return { ...DEFAULT_STORE }
   }
 
-  private persist(): void {
+  private saveTimeout: NodeJS.Timeout | null = null
+
+  private persist(immediate = false): void {
+    if (immediate) {
+      if (this.saveTimeout) {
+        clearTimeout(this.saveTimeout)
+        this.saveTimeout = null
+      }
+      try {
+        writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), 'utf-8')
+      } catch (e) {
+        console.error('[Store] Failed to write store synchronously:', e)
+      }
+      return
+    }
+
+    // Debounced async write to avoid blocking event loop during rapid log updates
+    if (this.saveTimeout) return
+    this.saveTimeout = setTimeout(() => {
+      this.saveTimeout = null
+      try {
+        writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), 'utf-8')
+      } catch (e) {
+        console.error('[Store] Failed to write store asynchronously:', e)
+      }
+    }, 300)
+  }
+
+  public flushSync(): void {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout)
+      this.saveTimeout = null
+    }
     try {
       writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), 'utf-8')
-    } catch (e) {
-      console.error('[Store] Failed to write store:', e)
+    } catch {
+      // ignore
     }
   }
 
@@ -90,14 +122,14 @@ export class AppStore {
     } else {
       this.data.accounts.push(account)
     }
-    this.persist()
+    this.persist(true)
     return account
   }
 
   public deleteAccount(id: string): boolean {
     const initialLen = this.data.accounts.length
     this.data.accounts = this.data.accounts.filter((a) => a.id !== id)
-    this.persist()
+    this.persist(true)
     return this.data.accounts.length < initialLen
   }
 
@@ -117,14 +149,14 @@ export class AppStore {
     } else {
       this.data.rules.push(rule)
     }
-    this.persist()
+    this.persist(true)
     return rule
   }
 
   public deleteRule(id: string): boolean {
     const initialLen = this.data.rules.length
     this.data.rules = this.data.rules.filter((r) => r.id !== id)
-    this.persist()
+    this.persist(true)
     return this.data.rules.length < initialLen
   }
 
@@ -149,7 +181,7 @@ export class AppStore {
 
   public clearLogs(): void {
     this.data.logs = []
-    this.persist()
+    this.persist(true)
   }
 
   // --- Mirrored Posts Mapping (for Auto-Delete) ---
@@ -196,7 +228,7 @@ export class AppStore {
 
   public updateSettings(settings: Partial<StoreData['settings']>) {
     this.data.settings = { ...this.data.settings, ...settings }
-    this.persist()
+    this.persist(true)
   }
 
   // --- Security & Credential Destruction ---
@@ -205,7 +237,7 @@ export class AppStore {
     this.data.settings.telegramApiId = undefined
     this.data.settings.telegramApiHash = undefined
     this.data.settings.telegramPhone = undefined
-    this.persist()
+    this.persist(true)
   }
 }
 

@@ -124,6 +124,7 @@
     "desc": "Detailed chronological record of incoming Telegram events and Twitter dispatches",
     "clearLogs": "Clear All Logs",
     "filterAll": "ALL",
+    "filterProcessing": "PROCESSING",
     "filterSuccess": "SUCCESS",
     "filterFiltered": "FILTERED",
     "filterDeleted": "DELETED",

@@ -433,6 +433,7 @@ export class TelegramMirrorService {
     )
 
     for (const rule of rules) {
+      const startTime = Date.now()
       const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
       const targetAccount = appStore.getAccount(rule.targetAccount.accountId)
 
@@ -447,7 +448,8 @@ export class TelegramMirrorService {
           processedText: '',
           mediaCount: 0,
           status: 'failed',
-          errorMessage: 'Target account not found'
+          errorMessage: 'Target account not found',
+          durationMs: Date.now() - startTime
         })
         continue
       }
@@ -460,7 +462,7 @@ export class TelegramMirrorService {
         sourceChannel: chatTitle,
         targetPlatform: rule.targetAccount.platform,
         originalText: rawText || (mediaBuffers.length > 0 ? `[全套媒体 - 共 ${mediaBuffers.length} 项]` : '(Media Message)'),
-        processedText: '正在同步至 X / Twitter...',
+        processedText: mediaBuffers.length > 0 ? `正在并发上传 ${mediaBuffers.length} 项附件并同步至 X / Twitter...` : '正在同步至 X / Twitter...',
         mediaCount: mediaBuffers.length,
         status: 'processing'
       })
@@ -483,27 +485,29 @@ export class TelegramMirrorService {
           originalText: rawText || '(Media Message)',
           processedText: '(Filtered by content rules)',
           mediaCount: 0,
-          status: 'filtered'
+          status: 'filtered',
+          durationMs: Date.now() - startTime
         })
         continue
       }
 
       // Dispatch to Twitter/X
       if (rule.targetAccount.platform === 'twitter') {
-        // Upload all media attachments to Twitter (images or videos)
+        // Upload all media attachments to Twitter in parallel for maximum speed
         const mediaIds: string[] = []
         if (rule.filters.forwardMedia !== false && mediaBuffers.length > 0) {
-          console.log(`[Mirror] Uploading ${mediaBuffers.length} media attachments to X...`)
-          for (const item of mediaBuffers) {
-            try {
-              const upRes = await twitterDriver.uploadMedia(targetAccount, item.buffer, item.mimeType)
-              if (upRes.success && upRes.mediaId) {
-                mediaIds.push(upRes.mediaId)
-              }
-            } catch (err) {
-              console.warn('[Mirror] Failed to upload media to Twitter:', err)
-            }
-          }
+          console.log(`[Mirror] Uploading ${mediaBuffers.length} media attachments to X in parallel...`)
+          const uploadPromises = mediaBuffers.map((item) =>
+            twitterDriver
+              .uploadMedia(targetAccount, item.buffer, item.mimeType)
+              .then((res) => (res.success && res.mediaId ? res.mediaId : null))
+              .catch((err) => {
+                console.warn('[Mirror] Failed to upload media to Twitter:', err)
+                return null
+              })
+          )
+          const uploaded = await Promise.all(uploadPromises)
+          mediaIds.push(...uploaded.filter((id): id is string => Boolean(id)))
         }
 
         const tweetContent =
@@ -548,7 +552,8 @@ export class TelegramMirrorService {
         }
         appStore.saveRule(rule)
 
-        // Record log
+        // Record log with duration
+        const durationMs = Date.now() - startTime
         this.emitLog({
           id: logId,
           timestamp: new Date().toISOString(),
@@ -560,7 +565,8 @@ export class TelegramMirrorService {
           mediaCount: mediaIds.length,
           status: publishRes.success ? 'success' : 'failed',
           errorMessage: publishRes.error,
-          targetUrl: publishRes.url
+          targetUrl: publishRes.url,
+          durationMs
         })
       }
     }

@@ -5,6 +5,7 @@ import { is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
 import { telegramMirrorService } from './mirror/telegram-listener'
 import { appStore } from './storage/store'
+import { prewarmTwitterTransaction } from './drivers/twitter-transaction'
 export { twitterDriver } from './drivers/twitter'
 
 let mainWindow: BrowserWindow | null = null
@@ -202,6 +203,12 @@ app.whenReady().then(async () => {
     console.warn('[Rosetta] Error refreshing accounts:', e)
   }
 
+  // Pre-warm Twitter client transaction ID in background for zero-latency post signing
+  prewarmTwitterTransaction().catch(() => {})
+  setInterval(() => {
+    prewarmTwitterTransaction().catch(() => {})
+  }, 8 * 60 * 1000)
+
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
     else mainWindow?.show()
@@ -210,6 +217,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  appStore.flushSync()
 })
 
 app.on('window-all-closed', () => {

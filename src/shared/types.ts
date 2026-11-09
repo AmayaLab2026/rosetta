@@ -72,6 +72,7 @@ export interface MirrorLogItem {
   status: 'success' | 'failed' | 'filtered' | 'processing' | 'deleted'
   errorMessage?: string
   targetUrl?: string
+  durationMs?: number
 }
 
 export interface MirroredPostRecord {

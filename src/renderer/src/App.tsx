@@ -75,15 +75,24 @@ function RosettaMain() {
       window.addEventListener('focus', handleFocus)
       document.addEventListener('visibilitychange', handleVisibility)
 
-      // Polling fallback to guarantee zero sync lag
+      // Smart background polling fallback to guarantee zero sync lag without UI flicker
       const pollTimer = setInterval(() => {
+        if (document.hidden) return
         window.rosetta.getLogs(150).then((lgs) => {
-          if (lgs) setLogs(lgs)
+          if (!lgs) return
+          setLogs((prev) => {
+            if (prev.length === lgs.length && prev[0]?.id === lgs[0]?.id && prev[0]?.status === lgs[0]?.status) {
+              return prev
+            }
+            // Keep in-flight processing logs intact
+            const processingMap = new Map(prev.filter((l) => l.status === 'processing').map((l) => [l.id, l]))
+            return lgs.map((item) => processingMap.get(item.id) || item)
+          })
         }).catch(() => {})
         window.rosetta.getMirrorRules().then((rls) => {
           if (rls) setRules(rls)
         }).catch(() => {})
-      }, 1500)
+      }, 3000)
 
       return () => {
         unsubLog()
@@ -129,7 +138,9 @@ function RosettaMain() {
             />
           )}
 
-          {currentTab === 'composer' && <Composer accounts={accounts} />}
+          {currentTab === 'composer' && (
+            <Composer accounts={accounts} onOpenLogs={() => setCurrentTab('logs')} />
+          )}
 
           {currentTab === 'rules' && (
             <RulesManager

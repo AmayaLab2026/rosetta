@@ -124,6 +124,7 @@
     "desc": "按时间顺序记录接收到的 Telegram 消息与 Twitter 发布全流程",
     "clearLogs": "清空全部日志",
     "filterAll": "全部",
+    "filterProcessing": "处理中",
     "filterSuccess": "成功",
     "filterFiltered": "过滤",
     "filterDeleted": "已同步删除",
