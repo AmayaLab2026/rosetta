@@ -39,10 +39,12 @@ export class TelegramMirrorService {
   >()
 
   public getStatus() {
+    const isActuallyConnected = Boolean(this.client && (this.client as any).connected)
+    const running = Boolean(this.isRunning && isActuallyConnected)
     const rules = appStore.getRules().filter((r) => r.enabled)
     return {
-      running: this.isRunning,
-      engineRunning: this.isRunning,
+      running,
+      engineRunning: running,
       activeRulesCount: rules.length
     }
   }
@@ -826,7 +828,7 @@ export class TelegramMirrorService {
     })
   }
 
-  private notifyStatusChange(): void {
+  public notifyStatusChange(): void {
     const status = this.getStatus()
     BrowserWindow.getAllWindows().forEach((win) => {
       try {

@@ -6,8 +6,9 @@ import { Composer } from './components/Composer'
 import { RulesManager } from './components/RulesManager'
 import { AccountsManager } from './components/AccountsManager'
 import { LogsView } from './components/LogsView'
+import { TerminalLogsView } from './components/TerminalLogsView'
 import { SettingsView } from './components/SettingsView'
-import { Account, MirrorRule, MirrorLogItem } from '../../shared/types'
+import { Account, MirrorRule, MirrorLogItem, TerminalLogItem } from '../../shared/types'
 import { I18nProvider, useI18n } from './i18n'
 
 function RosettaMain() {
@@ -16,22 +17,41 @@ function RosettaMain() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [rules, setRules] = useState<MirrorRule[]>([])
   const [logs, setLogs] = useState<MirrorLogItem[]>([])
+  const [terminalLogs, setTerminalLogs] = useState<TerminalLogItem[]>([])
 
   const loadAll = async () => {
     try {
       if (!window.rosetta) return
-      const [accs, rls, lgs, status] = await Promise.all([
+      const [accs, rls, lgs, status, tLogs] = await Promise.all([
         window.rosetta.getAccounts(),
         window.rosetta.getMirrorRules(),
         window.rosetta.getLogs(150),
-        window.rosetta.getMirrorEngineStatus()
+        window.rosetta.getMirrorEngineStatus(),
+        window.rosetta.getTerminalLogs?.() || Promise.resolve([])
       ])
       setAccounts(accs || [])
       setRules(rls || [])
       setLogs(lgs || [])
-      setEngineRunning(status?.running ?? status?.engineRunning ?? true)
+      if (tLogs) setTerminalLogs(tLogs)
+      if (status) {
+        setEngineRunning(Boolean(status.running || status.engineRunning))
+      }
     } catch (e) {
       console.error('[App] Failed to load data:', e)
+    }
+  }
+
+  const handleToggleEngine = async () => {
+    try {
+      if (engineRunning) {
+        await window.rosetta.stopMirrorEngine()
+      } else {
+        await window.rosetta.startMirrorEngine()
+      }
+      const st = await window.rosetta.getMirrorEngineStatus()
+      if (st) setEngineRunning(Boolean(st.running || st.engineRunning))
+    } catch (e) {
+      console.warn('[App] Failed to toggle engine:', e)
     }
   }
 
@@ -52,8 +72,13 @@ function RosettaMain() {
         })
         window.rosetta.getMirrorRules().then(setRules).catch(() => {})
       })
+      const unsubTerminalLog = window.rosetta.onTerminalLogAdded?.((newTLog) => {
+        setTerminalLogs((prev) => [...prev.slice(-999), newTLog])
+      })
       const unsubStatus = window.rosetta.onStatusChanged((status) => {
-        setEngineRunning(status?.running ?? status?.engineRunning ?? true)
+        if (status) {
+          setEngineRunning(Boolean(status.running || status.engineRunning))
+        }
       })
       const unsubAccounts = window.rosetta.onAccountsUpdated?.((updatedAcc) => {
         setAccounts((prev) => {
@@ -78,6 +103,9 @@ function RosettaMain() {
       // Smart background polling fallback to guarantee zero sync lag without UI flicker
       const pollTimer = setInterval(() => {
         if (document.hidden) return
+        window.rosetta.getMirrorEngineStatus().then((st) => {
+          if (st) setEngineRunning(Boolean(st.running || st.engineRunning))
+        }).catch(() => {})
         window.rosetta.getLogs(150).then((lgs) => {
           if (!lgs) return
           setLogs((prev) => {
@@ -96,6 +124,7 @@ function RosettaMain() {
 
       return () => {
         unsubLog()
+        unsubTerminalLog?.()
         unsubStatus()
         unsubAccounts?.()
         window.removeEventListener('focus', handleFocus)
@@ -115,6 +144,7 @@ function RosettaMain() {
         engineRunning={engineRunning}
         activeRulesCount={activeRulesCount}
         activeAccountsCount={activeAccountsCount}
+        onToggleEngine={handleToggleEngine}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -124,6 +154,7 @@ function RosettaMain() {
           rulesCount={rules.length}
           accountsCount={accounts.length}
           logsCount={logs.length}
+          terminalLogsCount={terminalLogs.length}
         />
 
         <main className="flex-1 overflow-hidden bg-background">
@@ -163,6 +194,16 @@ function RosettaMain() {
               onClearLogs={async () => {
                 await window.rosetta.clearLogs()
                 setLogs([])
+              }}
+            />
+          )}
+
+          {currentTab === 'terminal' && (
+            <TerminalLogsView
+              logs={terminalLogs}
+              onClearLogs={async () => {
+                await window.rosetta.clearTerminalLogs()
+                setTerminalLogs([])
               }}
             />
           )}

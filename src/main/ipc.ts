@@ -1,5 +1,6 @@
 import { ipcMain, app, shell } from 'electron'
 import { appStore } from './storage/store'
+import { terminalLogger } from './storage/terminal-logger'
 import { twitterDriver } from './drivers/twitter'
 import { telegramMirrorService } from './mirror/telegram-listener'
 import { ContentPipeline } from './mirror/pipeline'
@@ -154,11 +155,15 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('rules:save', (_, rule: MirrorRule) => {
-    return appStore.saveRule(rule)
+    const res = appStore.saveRule(rule)
+    telegramMirrorService.notifyStatusChange()
+    return res
   })
 
   ipcMain.handle('rules:delete', (_, id: string) => {
-    return appStore.deleteRule(id)
+    const res = appStore.deleteRule(id)
+    telegramMirrorService.notifyStatusChange()
+    return res
   })
 
   ipcMain.handle('rules:toggle', (_, id: string, enabled: boolean) => {
@@ -166,6 +171,7 @@ export function registerIpcHandlers(): void {
     if (rule) {
       rule.enabled = enabled
       appStore.saveRule(rule)
+      telegramMirrorService.notifyStatusChange()
       return true
     }
     return false
@@ -392,6 +398,16 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('logs:clear', () => {
     appStore.clearLogs()
+    return true
+  })
+
+  // --- Terminal Console Logs ---
+  ipcMain.handle('terminal:get', () => {
+    return terminalLogger.getLogs()
+  })
+
+  ipcMain.handle('terminal:clear', () => {
+    terminalLogger.clearLogs()
     return true
   })
 }

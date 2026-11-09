@@ -35,6 +35,10 @@ const api: RosettaAPI = {
   getLogs: (limit) => ipcRenderer.invoke('logs:get', limit),
   clearLogs: () => ipcRenderer.invoke('logs:clear'),
 
+  // Terminal Console Logs
+  getTerminalLogs: () => ipcRenderer.invoke('terminal:get'),
+  clearTerminalLogs: () => ipcRenderer.invoke('terminal:clear'),
+
   // Settings & System
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
@@ -48,6 +52,11 @@ const api: RosettaAPI = {
     const handler = (_: any, log: any) => callback(log)
     ipcRenderer.on('mirror:log-added', handler)
     return () => ipcRenderer.removeListener('mirror:log-added', handler)
+  },
+  onTerminalLogAdded: (callback) => {
+    const handler = (_: any, log: any) => callback(log)
+    ipcRenderer.on('terminal:log-added', handler)
+    return () => ipcRenderer.removeListener('terminal:log-added', handler)
   },
   onStatusChanged: (callback) => {
     const handler = (_: any, status: any) => callback(status)

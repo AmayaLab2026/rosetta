@@ -6,12 +6,14 @@ interface HeaderProps {
   engineRunning: boolean
   activeRulesCount: number
   activeAccountsCount: number
+  onToggleEngine?: () => void
 }
 
 export const Header: React.FC<HeaderProps> = ({
   engineRunning,
   activeRulesCount,
-  activeAccountsCount
+  activeAccountsCount,
+  onToggleEngine
 }) => {
   const { language, setLanguage, t } = useI18n()
 
@@ -73,12 +75,22 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Engine Always-On Status Badge */}
-        <div
-          className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-medium border shadow-2xs transition-colors ${
+        {/* Engine Always-On Status Badge (Interactive toggle & sync) */}
+        <button
+          onClick={onToggleEngine}
+          title={
             engineRunning
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-              : 'bg-surface-muted text-gray-600 border-surface-border'
+              ? language === 'zh'
+                ? '点击暂停/停止电报镜像引擎'
+                : 'Click to pause mirror engine'
+              : language === 'zh'
+              ? '点击立即启动电报镜像引擎'
+              : 'Click to start mirror engine'
+          }
+          className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-medium border shadow-2xs transition-all cursor-pointer active:scale-95 ${
+            engineRunning
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100/80 hover:border-emerald-400'
+              : 'bg-surface-muted text-gray-600 border-surface-border hover:bg-gray-200/80 hover:border-gray-400'
           }`}
         >
           <span className="relative flex h-2 w-2">
@@ -97,10 +109,10 @@ export const Header: React.FC<HeaderProps> = ({
                 ? '引擎就绪·实时监听中'
                 : 'Engine Active & Listening'
               : language === 'zh'
-              ? '引擎未启动'
-              : 'Engine Idle'}
+              ? '引擎未启动 (点击启动)'
+              : 'Engine Idle (Click to Start)'}
           </span>
-        </div>
+        </button>
       </div>
     </header>
   )

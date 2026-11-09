@@ -5,8 +5,12 @@ import { is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
 import { telegramMirrorService } from './mirror/telegram-listener'
 import { appStore } from './storage/store'
+import { terminalLogger } from './storage/terminal-logger'
 import { prewarmTwitterTransaction } from './drivers/twitter-transaction'
 export { twitterDriver } from './drivers/twitter'
+
+// Initialize real-time terminal logger to intercept all system console logs
+terminalLogger.init()
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null

@@ -75,6 +75,13 @@ export interface MirrorLogItem {
   durationMs?: number
 }
 
+export interface TerminalLogItem {
+  id: string
+  timestamp: string
+  level: 'info' | 'warn' | 'error' | 'debug'
+  message: string
+}
+
 export interface MirroredPostRecord {
   id: string
   ruleId: string
@@ -154,6 +161,10 @@ export interface RosettaAPI {
   getLogs: (limit?: number) => Promise<MirrorLogItem[]>
   clearLogs: () => Promise<boolean>
 
+  // Terminal Console Logs
+  getTerminalLogs: () => Promise<TerminalLogItem[]>
+  clearTerminalLogs: () => Promise<boolean>
+
   // Settings & System
   getSettings: () => Promise<AppSettings>
   saveSettings: (settings: Partial<AppSettings>) => Promise<boolean>
@@ -164,6 +175,7 @@ export interface RosettaAPI {
 
   // Listeners
   onLogAdded: (callback: (log: MirrorLogItem) => void) => () => void
+  onTerminalLogAdded: (callback: (log: TerminalLogItem) => void) => () => void
   onStatusChanged: (callback: (status: { engineRunning: boolean }) => void) => () => void
   onAccountsUpdated: (callback: (account: Account) => void) => () => void
 }

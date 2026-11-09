@@ -13,6 +13,7 @@
     "rules": "镜像规则",
     "accounts": "账号与授权",
     "logs": "活动流水",
+    "terminal": "终端日志",
     "settings": "系统设置",
     "engineTitle": "引擎内核",
     "paletteTitle": "配色体系",
