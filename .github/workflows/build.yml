@@ -2,13 +2,7 @@ name: Build & Release Rosetta
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - 'v*'
   pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -39,6 +33,9 @@ jobs:
 
       - name: Install Dependencies
         run: pnpm install --no-frozen-lockfile
+
+      - name: Run TypeScript Check
+        run: pnpm run typecheck
 
       - name: Compile & Build Application
         run: pnpm run build
