@@ -141,10 +141,7 @@ function RosettaMain() {
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground select-none font-sans">
-      <Header
-        activeRulesCount={activeRulesCount}
-        activeAccountsCount={activeAccountsCount}
-      />
+      <Header />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
@@ -177,10 +174,7 @@ function RosettaMain() {
           )}
 
           {currentTab === 'bot' && (
-            <TelegramBotStudio
-              accounts={accounts}
-              onGoComposer={() => setCurrentTab('composer')}
-            />
+            <TelegramBotStudio accounts={accounts} />
           )}
 
           {currentTab === 'rules' && (

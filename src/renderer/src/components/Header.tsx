@@ -2,15 +2,7 @@ import React from 'react'
 import { useI18n } from '../i18n'
 import logoImg from '../assets/logo.png'
 
-interface HeaderProps {
-  activeRulesCount: number
-  activeAccountsCount: number
-}
-
-export const Header: React.FC<HeaderProps> = ({
-  activeRulesCount,
-  activeAccountsCount
-}) => {
+export const Header: React.FC = () => {
   const { language, setLanguage, t } = useI18n()
 
   return (
@@ -25,23 +17,6 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
           <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-surface-muted text-gray-600 border border-surface-border shadow-2xs">
             {t.header.subtitle}
-          </span>
-        </div>
-
-        <div className="h-4 w-[1px] bg-surface-border mx-2" />
-
-        <div className="flex items-center gap-3 text-xs text-gray-500 font-mono">
-          <span className="flex items-center gap-1.5">
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                activeAccountsCount > 0 ? 'bg-emerald-600' : 'bg-amber-500'
-              }`}
-            />
-            {activeAccountsCount} {t.header.accounts}
-          </span>
-          <span className="text-surface-border">•</span>
-          <span>
-            {activeRulesCount} {t.header.activeRules}
           </span>
         </div>
       </div>

@@ -1,6 +1,6 @@
 {
   "name": "rosetta",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Rosetta - Multi-platform social sync & Telegram channel mirror workstation",
   "author": "LycorisNeko",
   "main": "./out/main/index.js",

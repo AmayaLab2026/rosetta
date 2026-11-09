@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { TelegramBotPostItem, Account } from '../../../shared/types'
 import {
   Bot,
-  Send,
   Trash2,
   ExternalLink,
   CheckCircle2,
@@ -14,9 +13,7 @@ import {
   RotateCcw,
   KeyRound,
   ShieldCheck,
-  Hash,
   HelpCircle,
-  ArrowRight,
   ChevronDown,
   ChevronUp,
   Eye,
@@ -27,10 +24,9 @@ import { useI18n } from '../i18n'
 
 interface TelegramBotStudioProps {
   accounts: Account[]
-  onGoComposer?: () => void
 }
 
-export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, onGoComposer }) => {
+export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
   const { language } = useI18n()
   const isZh = language === 'zh'
 
@@ -54,13 +50,6 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
   const [posts, setPosts] = useState<TelegramBotPostItem[]>([])
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // Manual Delete Tool
-  const [showManualDelete, setShowManualDelete] = useState(false)
-  const [manualChatId, setManualChatId] = useState('')
-  const [manualMsgId, setManualMsgId] = useState('')
-  const [manualDeleting, setManualDeleting] = useState(false)
-  const [manualResult, setManualResult] = useState<{ success: boolean; msg: string } | null>(null)
-
   // Tutorial Collapse state
   const [showTutorial, setShowTutorial] = useState(false)
 
@@ -79,7 +68,6 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
         }
         if (st.defaultBotChatId) {
           setChatId(st.defaultBotChatId)
-          setManualChatId(st.defaultBotChatId)
         }
       }
     }).catch(() => {})
@@ -168,46 +156,6 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
     }
   }
 
-  const handleManualDelete = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!manualChatId.trim() || !manualMsgId.trim()) return
-
-    const msgIdNum = parseInt(manualMsgId.trim(), 10)
-    if (isNaN(msgIdNum)) {
-      setManualResult({ success: false, msg: isZh ? '消息 ID 必须是纯数字' : 'Message ID must be numeric' })
-      return
-    }
-
-    setManualDeleting(true)
-    setManualResult(null)
-
-    try {
-      const res = await window.rosetta.deleteTelegramBotPost({
-        chatId: manualChatId.trim(),
-        messageId: msgIdNum,
-        botToken: botToken.trim() || undefined
-      })
-
-      if (res.success) {
-        setManualResult({
-          success: true,
-          msg: isZh ? `成功在 ${manualChatId} 撤回了消息 #${msgIdNum}` : `Successfully revoked #${msgIdNum} in ${manualChatId}`
-        })
-        setManualMsgId('')
-        loadPosts()
-      } else {
-        setManualResult({
-          success: false,
-          msg: res.error || (isZh ? '删除失败，请核对消息是否存在或 Bot 是否拥有管理员权限' : 'Failed to delete')
-        })
-      }
-    } catch (err: any) {
-      setManualResult({ success: false, msg: err?.message || 'Error' })
-    } finally {
-      setManualDeleting(false)
-    }
-  }
-
   const handleClearHistory = async () => {
     if (window.confirm(isZh ? '清空本地已发消息记录？（不会影响 Telegram 频道上的线上消息）' : 'Clear local records?')) {
       await window.rosetta.clearTelegramBotPosts?.()
@@ -217,49 +165,22 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto h-full overflow-y-auto font-sans">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-base font-semibold text-foreground font-mono tracking-tight flex items-center gap-2">
-              <Bot className="w-4 h-4 text-brand" />
-              <span>{isZh ? 'Telegram 机器人中枢 (交互发帖 & 删帖)' : 'Telegram Bot Studio'}</span>
-            </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
-              官方 Bot API 交互会话
-            </span>
-          </div>
-          <p className="text-xs text-gray-500 font-mono mt-0.5">
-            {isZh
-              ? '用户可在 Telegram 私聊中直接与机器人沟通发帖至推特和频道，并提供远程管理与删帖撤回'
-              : 'Interact with bot in private chat to post to Twitter/channel, manage revocation and credentials'}
-          </p>
+      {/* Top Header without extra buttons */}
+      <div>
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-base font-semibold text-foreground font-mono tracking-tight flex items-center gap-2">
+            <Bot className="w-4 h-4 text-brand" />
+            <span>{isZh ? 'Telegram 机器人中枢 (交互发帖 & 删帖)' : 'Telegram Bot Studio'}</span>
+          </h2>
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+            官方 Bot API 交互会话
+          </span>
         </div>
-
-        <div className="flex items-center gap-2 font-mono text-xs self-start sm:self-auto">
-          {onGoComposer && (
-            <button
-              onClick={onGoComposer}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand hover:bg-brand-hover text-white font-medium shadow-glow-terracotta transition-all active:scale-95"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>{isZh ? '前往统一发帖器' : 'Composer'}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          <button
-            onClick={() => setShowManualDelete(!showManualDelete)}
-            className={`px-3 py-1.5 rounded-lg border transition-all shadow-2xs flex items-center gap-1.5 ${
-              showManualDelete
-                ? 'bg-rose-50 text-rose-700 border-rose-300 font-semibold'
-                : 'bg-surface border-surface-border text-gray-700 hover:text-foreground hover:bg-surface-hover'
-            }`}
-          >
-            <Hash className="w-3.5 h-3.5" />
-            <span>{showManualDelete ? (isZh ? '收起指定删帖' : 'Close Tool') : (isZh ? '指定ID删帖' : 'ID Revoke Tool')}</span>
-          </button>
-        </div>
+        <p className="text-xs text-gray-500 font-mono mt-0.5">
+          {isZh
+            ? '用户可在 Telegram 私聊中直接与机器人沟通发帖至推特和频道，并提供远程管理与删帖撤回'
+            : 'Interact with bot in private chat to post to Twitter/channel, manage revocation and credentials'}
+        </p>
       </div>
 
       {/* Interactive Telegram Bot Controller Card */}
@@ -459,7 +380,6 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
               value={chatId}
               onChange={(e) => {
                 setChatId(e.target.value)
-                setManualChatId(e.target.value)
               }}
               onBlur={() => handleSaveCredentials(botToken, chatId)}
               className="w-full bg-background border border-surface-border rounded-lg px-3 py-2 text-xs text-foreground font-mono focus:outline-hidden focus:border-brand focus:ring-1 focus:ring-brand/30"
@@ -494,67 +414,6 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
           </div>
         </div>
       </div>
-
-      {/* Manual Remote Message Revocation Tool */}
-      {showManualDelete && (
-        <form
-          onSubmit={handleManualDelete}
-          className="p-4 rounded-xl bg-surface border border-rose-200/80 shadow-panel space-y-3 font-mono text-xs animate-in fade-in duration-200"
-        >
-          <div className="flex items-center justify-between pb-2 border-b border-rose-100">
-            <span className="font-semibold text-rose-800 flex items-center gap-1.5">
-              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-              <span>{isZh ? '指定频道与 Message ID 远程撤回' : 'Remote Revoke by Message ID'}</span>
-            </span>
-            <span className="text-[11px] text-gray-500">
-              {isZh ? '调用官方 Bot deleteMessage 接口撤回频道内指定消息' : 'Calls official Bot deleteMessage'}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] text-gray-600 mb-1">{isZh ? '频道 ID 或 @username' : 'Channel ID'}</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. @my_channel or -100123456789"
-                value={manualChatId}
-                onChange={(e) => setManualChatId(e.target.value)}
-                className="w-full bg-background border border-surface-border rounded-lg px-3 py-1.5 text-xs text-foreground font-mono focus:outline-hidden focus:border-rose-400"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] text-gray-600 mb-1">{isZh ? '消息 Message ID (纯数字)' : 'Message ID'}</label>
-              <input
-                type="number"
-                required
-                placeholder="e.g. 1528"
-                value={manualMsgId}
-                onChange={(e) => setManualMsgId(e.target.value)}
-                className="w-full bg-background border border-surface-border rounded-lg px-3 py-1.5 text-xs text-foreground font-mono focus:outline-hidden focus:border-rose-400"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-1">
-            {manualResult ? (
-              <span className={`text-[11px] ${manualResult.success ? 'text-emerald-700' : 'text-rose-700'}`}>
-                {manualResult.msg}
-              </span>
-            ) : (
-              <div />
-            )}
-
-            <button
-              type="submit"
-              disabled={manualDeleting || !manualChatId.trim() || !manualMsgId.trim() || !botToken.trim()}
-              className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-medium disabled:opacity-50 transition-all shadow-2xs active:scale-95"
-            >
-              {manualDeleting ? (isZh ? '正在撤回...' : 'Deleting...') : (isZh ? '执行远程删帖' : 'Execute Revoke')}
-            </button>
-          </div>
-        </form>
-      )}
 
       {/* Sent Message Management & Revocation Stream */}
       <div className="rounded-xl bg-surface border border-surface-border p-5 space-y-4 shadow-panel font-mono">
