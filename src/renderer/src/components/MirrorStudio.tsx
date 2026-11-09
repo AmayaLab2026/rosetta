@@ -247,8 +247,20 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
                         {log.sourceChannel}
                       </span>
                       <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />
-                      <span className="text-gray-800 font-semibold">
-                        {log.targetPlatform === 'telegram' ? 'Telegram' : 'X (Twitter)'}
+                      <span className="font-semibold text-[11px]">
+                        {log.targetPlatform === 'both' ? (
+                          <span className="text-brand bg-brand-subtle px-1.5 py-0.5 rounded border border-brand-border/60">
+                            [X + TG 双端广播]
+                          </span>
+                        ) : log.targetPlatform === 'telegram' ? (
+                          <span className="text-telegram bg-telegram-subtle px-1.5 py-0.5 rounded border border-telegram-border/50">
+                            Telegram 频道
+                          </span>
+                        ) : (
+                          <span className="text-gray-800 bg-surface px-1.5 py-0.5 rounded border border-surface-border">
+                            X (Twitter)
+                          </span>
+                        )}
                       </span>
 
                       {log.mediaCount > 0 && (
@@ -279,7 +291,13 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
                       {log.status === 'success' && (
                         <span className="flex items-center gap-1 text-[11px] text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-300 font-medium">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>{t.studio.mirrored}</span>
+                          <span>
+                            {log.targetPlatform === 'both'
+                              ? '双端已发'
+                              : log.targetPlatform === 'telegram'
+                              ? '频道已发'
+                              : t.studio.mirrored}
+                          </span>
                         </span>
                       )}
                       {log.status === 'filtered' && (
@@ -325,13 +343,13 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
                     </div>
                     <div className="bg-surface p-2.5 rounded-lg border border-surface-border shadow-2xs">
                       <span className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1 font-semibold">
-                        {t.studio.processedForX}
+                        {log.targetPlatform === 'both' ? '发布结果 (双端)' : t.studio.processedForX}
                       </span>
-                      <p className="text-foreground text-[11px] line-clamp-3 whitespace-pre-wrap font-sans leading-relaxed select-text">
+                      <div className="text-foreground text-[11px] max-h-36 overflow-y-auto whitespace-pre-wrap font-sans leading-relaxed select-text">
                         {log.processedText || (
                           <span className="text-gray-400 italic font-mono">{t.studio.noOutput}</span>
                         )}
-                      </p>
+                      </div>
                       {log.errorMessage && (
                         <p className="text-[11px] text-rose-700 font-mono mt-1 bg-rose-50 p-1.5 rounded border border-rose-200">
                           Error: {log.errorMessage}

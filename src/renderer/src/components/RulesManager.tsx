@@ -51,7 +51,7 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
 
     const newRule: MirrorRule = {
       id: `rule_${Date.now()}`,
-      name: name.trim() || `Mirror ${sourceChannel} ➔ @${targetAcc?.username}`,
+      name: name.trim() || `Mirror ${sourceChannel} -> @${targetAcc?.username}`,
       enabled: true,
       sourceChannel: {
         username: sourceChannel.trim().replace(/^https?:\/\/t\.me\//, '@')

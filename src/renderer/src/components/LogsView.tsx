@@ -152,8 +152,20 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
                     {log.sourceChannel}
                   </span>
                   <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />
-                  <span className="text-gray-800 font-semibold text-[11px]">
-                    {log.targetPlatform === 'telegram' ? 'Telegram' : 'X (Twitter)'}
+                  <span className="font-semibold text-[11px]">
+                    {log.targetPlatform === 'both' ? (
+                      <span className="text-brand bg-brand-subtle px-1.5 py-0.5 rounded border border-brand-border/60">
+                        [X + TG 双端广播]
+                      </span>
+                    ) : log.targetPlatform === 'telegram' ? (
+                      <span className="text-telegram bg-telegram-subtle px-1.5 py-0.5 rounded border border-telegram-border/50">
+                        Telegram 频道
+                      </span>
+                    ) : (
+                      <span className="text-gray-800 bg-surface px-1.5 py-0.5 rounded border border-surface-border">
+                        X (Twitter)
+                      </span>
+                    )}
                   </span>
 
                   {log.mediaCount > 0 && (
@@ -184,7 +196,13 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
                   {log.status === 'success' && (
                     <span className="flex items-center gap-1 text-[11px] text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-300 font-medium shadow-2xs">
                       <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                      <span>{t.studio.mirrored}</span>
+                      <span>
+                        {log.targetPlatform === 'both'
+                          ? '双端已发'
+                          : log.targetPlatform === 'telegram'
+                          ? '频道已发'
+                          : t.studio.mirrored}
+                      </span>
                     </span>
                   )}
                   {log.status === 'filtered' && (

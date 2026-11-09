@@ -1,6 +1,6 @@
 {
   "header": {
-    "subtitle": "TG ➔ X 同步中继",
+    "subtitle": "TG -> X 同步中继",
     "accounts": "个账号",
     "activeRules": "条启用规则",
     "engineActive": "引擎运行中",
@@ -58,8 +58,8 @@
     "broadcastBtn": "一键发布",
     "publishing": "发布中...",
     "publishSuccess": "推文已成功发布！",
-    "openOnX": "在 X 上查看 ➔",
-    "openOnTelegram": "在 Telegram 查看 ➔",
+    "openOnX": "在 X 上查看 ->",
+    "openOnTelegram": "在 Telegram 查看 ->",
     "threadPreview": "Thread 连载拆分预览",
     "noTwitterAcc": "推特未绑定",
     "crossPlatformBadge": "聚合多端广播",
@@ -113,7 +113,7 @@
     "step2Desc": "直接发送文本或上传图片、视频（自动相册打包），机器人暂存并展示预览",
     "step3Title": "3. 确认并返回链接",
     "step3Desc": "点击【确认发布】，机器人即刻执行分发并回复直达推文与频道链接",
-    "guideTitle": "📖 官方机器人 (@BotFather) 极速创建与频道配置指南",
+    "guideTitle": "[指南] 官方机器人 (@BotFather) 极速创建与频道配置指南",
     "hideGuide": "收起教程",
     "showGuide": "展开教程",
     "credentialsTitle": "机器人服务端凭证记忆配置",

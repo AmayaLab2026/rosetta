@@ -166,7 +166,7 @@ export const DeletionView: React.FC<DeletionViewProps> = ({ accounts }) => {
               : 'bg-surface border-surface-border text-gray-600 hover:text-foreground hover:bg-surface-hover'
           }`}
         >
-          <span>✈️</span>
+          <span className="font-mono font-bold">[TG]</span>
           <span>{t.deletion.tabTelegram}</span>
         </button>
 
@@ -178,7 +178,7 @@ export const DeletionView: React.FC<DeletionViewProps> = ({ accounts }) => {
               : 'bg-surface border-surface-border text-gray-600 hover:text-foreground hover:bg-surface-hover'
           }`}
         >
-          <span>𝕏</span>
+          <span className="font-mono font-bold">[X]</span>
           <span>{t.deletion.tabTwitter}</span>
         </button>
       </div>

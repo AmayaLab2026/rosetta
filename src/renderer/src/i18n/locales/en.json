@@ -1,6 +1,6 @@
 {
   "header": {
-    "subtitle": "TG ➔ X Relay",
+    "subtitle": "TG -> X Relay",
     "accounts": "Accounts",
     "activeRules": "Active Rules",
     "engineActive": "Engine Active",
@@ -58,8 +58,8 @@
     "broadcastBtn": "Publish",
     "publishing": "Publishing...",
     "publishSuccess": "Post published successfully!",
-    "openOnX": "View on X ➔",
-    "openOnTelegram": "View on Telegram ➔",
+    "openOnX": "View on X ->",
+    "openOnTelegram": "View on Telegram ->",
     "threadPreview": "Thread Sequence Preview",
     "noTwitterAcc": "X Unlinked",
     "crossPlatformBadge": "Cross-Platform Broadcast",
@@ -113,7 +113,7 @@
     "step2Desc": "Send text or media attachments (auto-grouped into albums), bot previews content",
     "step3Title": "3. Confirm & Links",
     "step3Desc": "Click confirm to publish and receive direct links",
-    "guideTitle": "📖 Official Bot Creation & Channel Guide (@BotFather)",
+    "guideTitle": "[Guide] Official Bot Creation & Channel Guide (@BotFather)",
     "hideGuide": "Hide Guide",
     "showGuide": "Show Guide",
     "credentialsTitle": "Bot Credentials Configuration",

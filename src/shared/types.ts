@@ -1,4 +1,4 @@
-export type PlatformType = 'telegram' | 'twitter'
+export type PlatformType = 'telegram' | 'twitter' | 'both'
 
 export interface Account {
   id: string

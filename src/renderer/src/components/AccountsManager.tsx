@@ -377,9 +377,18 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
         {telegramBotAccount ? (
           <div className="p-4 rounded-xl bg-surface-muted/60 border border-surface-border flex items-center justify-between shadow-2xs surface-hover-card">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-telegram-subtle border border-telegram-border/60 flex items-center justify-center font-bold text-lg text-telegram shadow-2xs">
-                🤖
-              </div>
+              {telegramBotAccount.avatarUrl ? (
+                <img
+                  src={telegramBotAccount.avatarUrl}
+                  alt={telegramBotAccount.username}
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                  className="w-10 h-10 rounded-full border border-surface-border object-cover shrink-0 shadow-2xs"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-telegram-subtle border border-telegram-border/60 flex items-center justify-center font-bold text-xs text-telegram shadow-2xs font-mono">
+                  [BOT]
+                </div>
+              )}
               <div className="space-y-0.5">
                 <p className="text-xs font-semibold text-foreground">{telegramBotAccount.displayName}</p>
                 <p className="text-[11px] font-mono text-gray-500">{telegramBotAccount.username}</p>
@@ -429,7 +438,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 rel="noreferrer"
                 className="text-[11px] text-telegram hover:underline font-semibold flex items-center gap-1"
               >
-                <span>直达 @BotFather 创建机器人 ➔</span>
+                <span>直达 @BotFather 创建机器人 -&gt;</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
 

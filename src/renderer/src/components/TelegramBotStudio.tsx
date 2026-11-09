@@ -26,8 +26,9 @@ interface TelegramBotStudioProps {
   accounts: Account[]
 }
 
-export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
+export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts = [] }) => {
   const { t } = useI18n()
+  const botAccount = accounts.find((a) => a.platform === 'telegram_bot')
 
   // Credentials & Configuration
   const [botToken, setBotToken] = useState('')
@@ -236,9 +237,18 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
       <div className="rounded-xl bg-surface border border-surface-border p-5 shadow-panel space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-telegram-subtle border border-telegram-border/60 flex items-center justify-center text-telegram font-bold text-lg shadow-2xs">
-              🤖
-            </div>
+            {botAccount?.avatarUrl ? (
+              <img
+                src={botAccount.avatarUrl}
+                alt={interactiveStatus.botUsername || 'Bot'}
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
+                className="w-10 h-10 rounded-xl border border-surface-border object-cover shrink-0 shadow-2xs"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-telegram-subtle border border-telegram-border/60 flex items-center justify-center text-telegram font-bold text-xs shadow-2xs font-mono">
+                [BOT]
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-sm text-foreground">
@@ -471,7 +481,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
                 rel="noreferrer"
                 className="text-telegram hover:underline font-semibold flex items-center gap-1"
               >
-                <span>直达 @BotFather ➔</span>
+                <span>直达 @BotFather -&gt;</span>
               </a>
             </div>
           </div>

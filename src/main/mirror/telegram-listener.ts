@@ -235,14 +235,33 @@ export class TelegramMirrorService {
       }
     }
 
-    // Download media buffer if present (supports photos, videos, gifs; filters out stickers/emojis)
-    let downloadedMedia: MediaItem | null = null
+    // Check and drop Telegram stickers, animated stickers, custom emojis, and dice
     const isSticker =
       Boolean(message.sticker) ||
+      Boolean(message.dice) ||
+      message.media?.className === 'MessageMediaDice' ||
       message.media?.document?.mimeType === 'application/x-tgsticker' ||
-      message.media?.document?.attributes?.some((a: any) => a.className === 'DocumentAttributeSticker')
+      message.media?.document?.attributes?.some(
+        (a: any) =>
+          a.className === 'DocumentAttributeSticker' ||
+          a.className === 'DocumentAttributeCustomEmoji'
+      )
 
-    if (message.media && this.client && !isSticker) {
+    if (isSticker) {
+      console.log(`[Mirror] Dropped sticker/custom emoji message #${message.id} from "${chatTitle}" per drop rule.`)
+      return
+    }
+
+    // If message has no real text and no media, drop it
+    const cleanRaw = rawText.replace(/\[(?:Custom Emoji|Emoji|Sticker)[^\]]*\]/gi, '').trim()
+    if (!cleanRaw && !message.media) {
+      console.log(`[Mirror] Dropped empty / pure emoji text message #${message.id} from "${chatTitle}".`)
+      return
+    }
+
+    // Download media buffer if present (supports photos, videos, gifs)
+    let downloadedMedia: MediaItem | null = null
+    if (message.media && this.client) {
       try {
         const isDocVideo =
           Boolean(message.video) ||
@@ -449,15 +468,15 @@ export class TelegramMirrorService {
         messageDate
       )
 
-      if (shouldDrop && mediaBuffers.length === 0) {
+      if ((shouldDrop || !processedText.trim()) && mediaBuffers.length === 0) {
         this.emitLog({
           id: logId,
           timestamp: new Date().toISOString(),
           ruleId: rule.id,
           sourceChannel: chatTitle,
           targetPlatform: rule.targetAccount.platform,
-          originalText: rawText || '(Media Message)',
-          processedText: '(Filtered by content rules)',
+          originalText: rawText || '[表情包 / 贴纸 / 空白内容]',
+          processedText: '[规则拦截] 消息无有效正文或有效媒体附件，已自动丢弃',
           mediaCount: 0,
           status: 'filtered',
           durationMs: Date.now() - startTime

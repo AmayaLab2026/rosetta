@@ -58,10 +58,10 @@ export class TelegramBotInteractiveService {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               commands: [
-                { command: 'start', description: '🚀 开启发帖菜单 / 发送图文视频' },
-                { command: 'delete', description: '🗑️ 撤回/删除已发布贴文 (1~5选项卡)' },
-                { command: 'help', description: '📖 使用指南与指令帮助' },
-                { command: 'cancel', description: '❌ 取消当前操作 / 重置会话' }
+                { command: 'start', description: '开启发帖菜单 / 发送图文视频' },
+                { command: 'delete', description: '撤回/删除已发布贴文 (1~5选项卡)' },
+                { command: 'help', description: '使用指南与指令帮助' },
+                { command: 'cancel', description: '取消当前操作 / 重置会话' }
               ]
             })
           })
@@ -149,7 +149,6 @@ export class TelegramBotInteractiveService {
       const cb = update.callback_query
       const fromId = cb.from?.id
       const data = cb.data as string
-      const messageId = cb.message?.message_id
 
       // Acknowledge callback immediately
       fetch(`${baseUrl}/answerCallbackQuery`, {
@@ -162,7 +161,7 @@ export class TelegramBotInteractiveService {
 
       // Security check for unauthorized user clicks
       if (!appStore.isBotUserAuthorized(fromId)) {
-        await this.sendMessage(baseUrl, fromId, '🔒 <b>未授权访问</b>\n请在私聊中直接发送 Rosetta 桌面端显示的 6 位匹配码完成配对。', { parse_mode: 'HTML' })
+        await this.sendMessage(baseUrl, fromId, '<b>[未授权访问]</b>\n请在私聊中直接发送 Rosetta 桌面端显示的 6 位匹配码完成配对。', { parse_mode: 'HTML' })
         return
       }
 
@@ -179,7 +178,7 @@ export class TelegramBotInteractiveService {
       if (data === 'action_cancel') {
         session.step = 'idle'
         session.content = { text: '', mediaFiles: [] }
-        await this.sendMessage(baseUrl, fromId, '❌ 已取消本次发布流程。随时发送 /start 即可重新发起发帖。')
+        await this.sendMessage(baseUrl, fromId, '[取消] 已取消本次流程。随时发送 /start 即可重新发起发帖。')
         return
       }
 
@@ -189,14 +188,14 @@ export class TelegramBotInteractiveService {
         session.step = 'waiting_content'
         session.content = { text: '', mediaFiles: [] }
 
-        let modeDesc = '【⚡ 两端同时广播 (Twitter + TG 频道)】'
-        if (mode === 'twitter') modeDesc = '【𝕏 仅发往 Twitter (X)】'
-        else if (mode === 'telegram') modeDesc = '【✈️ 仅发往 Telegram 频道】'
+        let modeDesc = '[双端广播] (Twitter + Telegram 频道)'
+        if (mode === 'twitter') modeDesc = '[仅发往 Twitter (X)]'
+        else if (mode === 'telegram') modeDesc = '[仅发往 Telegram 频道]'
 
         await this.sendMessage(
           baseUrl,
           fromId,
-          `✅ <b>发布目标已选定</b>\n\n📌 模式：${modeDesc}\n\n💬 <b>请直接发送你要发布的内容：</b>\n• 可以直接发送文字消息\n• 也可以发送图片、多图相册或视频（支持附带文字说明）\n\n<i>随时发送 /cancel 可放弃本次发帖。</i>`,
+          `<b>[目标已选定]</b>\n\n发布模式：${modeDesc}\n\n<b>请直接发送你要发布的内容：</b>\n• 可以直接发送文字消息\n• 也可以发送图片、相册或视频（支持附带文字说明）\n\n<i>随时发送 /cancel 可放弃本次发帖。</i>`,
           { parse_mode: 'HTML' }
         )
         return
@@ -204,12 +203,12 @@ export class TelegramBotInteractiveService {
 
       if (data === 'confirm_publish') {
         if (session.step !== 'confirming') {
-          await this.sendMessage(baseUrl, fromId, '⚠️ 当前会话已过期，请重新发送 /start 发起发帖。')
+          await this.sendMessage(baseUrl, fromId, '[提示] 当前会话已过期，请重新发送 /start 发起发帖。')
           return
         }
 
         session.step = 'publishing'
-        await this.sendMessage(baseUrl, fromId, '⏳ 正在处理媒体并调度多平台发布中，请稍候...')
+        await this.sendMessage(baseUrl, fromId, '[处理中] 正在处理媒体并调度多平台发布中，请稍候...')
 
         // Execute actual multi-platform publish
         await this.executeUserPublish(baseUrl, fromId, session)
@@ -220,16 +219,16 @@ export class TelegramBotInteractiveService {
 
       // Delete Menu
       if (data === 'menu_delete') {
-        await this.sendMessage(baseUrl, fromId, '🗑️ <b>请选择需要查看并撤回的历史平台：</b>\n（一次性获取最近 5 条已发布贴文并提供 1~5 选项卡选择）', {
+        await this.sendMessage(baseUrl, fromId, '<b>[历史撤回] 请选择需要查看并撤回的历史平台：</b>\n（一次性获取最近 5 条已发布贴文并提供 1~5 选项卡选择）', {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
               [
-                { text: '✈️ 查看电报频道历史 (最近5条)', callback_data: 'del_hist_tg' },
-                { text: '𝕏 查看推特推文历史 (最近5条)', callback_data: 'del_hist_tw' }
+                { text: '[电报] 查看电报频道历史 (最近5条)', callback_data: 'del_hist_tg' },
+                { text: '[推特] 查看推特推文历史 (最近5条)', callback_data: 'del_hist_tw' }
               ],
               [
-                { text: '🔙 返回主菜单', callback_data: 'action_cancel' }
+                { text: '[返回主菜单]', callback_data: 'action_cancel' }
               ]
             ]
           }
@@ -244,7 +243,7 @@ export class TelegramBotInteractiveService {
         const posts = await telegramMirrorService.getChannelRecentMessages(targetChat, 5)
 
         if (posts.length === 0) {
-          await this.sendMessage(baseUrl, fromId, `⚠️ 暂未查询到电报频道 <code>${targetChat || '默认频道'}</code> 的历史消息。`, { parse_mode: 'HTML' })
+          await this.sendMessage(baseUrl, fromId, `[提示] 暂未查询到电报频道 <code>${targetChat || '默认频道'}</code> 的历史消息。`, { parse_mode: 'HTML' })
           return
         }
 
@@ -254,16 +253,16 @@ export class TelegramBotInteractiveService {
           date: p.date
         }))
 
-        const numEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣']
-        let summaryText = `📋 <b>电报频道 ${targetChat} 最近 ${posts.length} 条贴文：</b>\n\n`
+        const numLabels = ['[1]', '[2]', '[3]', '[4]', '[5]']
+        let summaryText = `<b>[电报频道 ${targetChat} 最近 ${posts.length} 条贴文]</b>\n\n`
         posts.forEach((p, idx) => {
           const preview = p.text.length > 50 ? `${p.text.slice(0, 50)}...` : (p.text || (p.hasMedia ? '[多媒体内容]' : '(空)'))
-          summaryText += `${numEmojis[idx]} <b>#${p.id}</b> (${new Date(p.date).toLocaleTimeString()})\n<blockquote>${this.escapeHtml(preview)}</blockquote>\n`
+          summaryText += `${numLabels[idx]} <b>#${p.id}</b> (${new Date(p.date).toLocaleTimeString()})\n<blockquote>${this.escapeHtml(preview)}</blockquote>\n`
         })
         summaryText += `\n<i>请在下方直接点击【1~${posts.length}】选项卡选择要撤回的贴文：</i>`
 
         const selectButtons = posts.map((_, idx) => ({
-          text: `${numEmojis[idx]} 删第${idx + 1}条`,
+          text: `[删第${idx + 1}条]`,
           callback_data: `sel_del_tg_${idx}`
         }))
 
@@ -274,7 +273,7 @@ export class TelegramBotInteractiveService {
           keyboardRows.push(selectButtons.slice(0, 3))
           keyboardRows.push(selectButtons.slice(3))
         }
-        keyboardRows.push([{ text: '🔙 取消', callback_data: 'action_cancel' }])
+        keyboardRows.push([{ text: '[取消]', callback_data: 'action_cancel' }])
 
         await this.sendMessage(baseUrl, fromId, summaryText, {
           parse_mode: 'HTML',
@@ -287,13 +286,13 @@ export class TelegramBotInteractiveService {
       if (data === 'del_hist_tw') {
         const activeTwAcc = appStore.getAccounts().find((a) => a.platform === 'twitter' && a.status === 'active')
         if (!activeTwAcc) {
-          await this.sendMessage(baseUrl, fromId, '⚠️ 未在 Rosetta 中绑定活跃的 X / Twitter 账号。')
+          await this.sendMessage(baseUrl, fromId, '[提示] 未在 Rosetta 中绑定活跃的 X / Twitter 账号。')
           return
         }
 
         const tweets = await twitterDriver.fetchRecentTweetsForDeletion(activeTwAcc, 5)
         if (tweets.length === 0) {
-          await this.sendMessage(baseUrl, fromId, `⚠️ 暂未获取到 @${activeTwAcc.username} 的推文记录。`)
+          await this.sendMessage(baseUrl, fromId, `[提示] 暂未获取到 @${activeTwAcc.username} 的推文记录。`)
           return
         }
 
@@ -303,16 +302,16 @@ export class TelegramBotInteractiveService {
           createdAt: tw.createdAt
         }))
 
-        const numEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣']
-        let summaryText = `📋 <b>Twitter @${activeTwAcc.username} 最近 ${tweets.length} 条推文：</b>\n\n`
+        const numLabels = ['[1]', '[2]', '[3]', '[4]', '[5]']
+        let summaryText = `<b>[Twitter @${activeTwAcc.username} 最近 ${tweets.length} 条推文]</b>\n\n`
         tweets.forEach((tw, idx) => {
           const preview = tw.text.length > 50 ? `${tw.text.slice(0, 50)}...` : (tw.text || '(空)')
-          summaryText += `${numEmojis[idx]} <b>#${tw.id}</b> (${new Date(tw.createdAt).toLocaleTimeString()})\n<blockquote>${this.escapeHtml(preview)}</blockquote>\n`
+          summaryText += `${numLabels[idx]} <b>#${tw.id}</b> (${new Date(tw.createdAt).toLocaleTimeString()})\n<blockquote>${this.escapeHtml(preview)}</blockquote>\n`
         })
         summaryText += `\n<i>请在下方直接点击【1~${tweets.length}】选项卡选择要删除的推文：</i>`
 
         const selectButtons = tweets.map((_, idx) => ({
-          text: `${numEmojis[idx]} 删第${idx + 1}条`,
+          text: `[删第${idx + 1}条]`,
           callback_data: `sel_del_tw_${idx}`
         }))
 
@@ -323,7 +322,7 @@ export class TelegramBotInteractiveService {
           keyboardRows.push(selectButtons.slice(0, 3))
           keyboardRows.push(selectButtons.slice(3))
         }
-        keyboardRows.push([{ text: '🔙 取消', callback_data: 'action_cancel' }])
+        keyboardRows.push([{ text: '[取消]', callback_data: 'action_cancel' }])
 
         await this.sendMessage(baseUrl, fromId, summaryText, {
           parse_mode: 'HTML',
@@ -337,7 +336,7 @@ export class TelegramBotInteractiveService {
         const idx = parseInt(data.replace('sel_del_tg_', ''), 10)
         const targetPost = session.recentTgCache?.[idx]
         if (!targetPost || !targetPost.id) {
-          await this.sendMessage(baseUrl, fromId, '⚠️ 未找到选中的贴文，请重新点击 /delete 检索。')
+          await this.sendMessage(baseUrl, fromId, '[提示] 未找到选中的贴文，请重新输入 /delete 检索。')
           return
         }
 
@@ -350,10 +349,10 @@ export class TelegramBotInteractiveService {
         })
 
         if (res.success) {
-          await this.sendMessage(baseUrl, fromId, `✅ <b>已成功撤回第 ${idx + 1} 条电报消息</b> (#${targetPost.id})！`, { parse_mode: 'HTML' })
+          await this.sendMessage(baseUrl, fromId, `<b>[撤回成功]</b> 已从电报频道撤回第 ${idx + 1} 条消息 (#${targetPost.id})！`, { parse_mode: 'HTML' })
           session.recentTgCache.splice(idx, 1)
         } else {
-          await this.sendMessage(baseUrl, fromId, `❌ 撤回第 ${idx + 1} 条消息 (#${targetPost.id}) 失败：${res.error}`)
+          await this.sendMessage(baseUrl, fromId, `[失败] 撤回第 ${idx + 1} 条消息 (#${targetPost.id}) 失败：${res.error}`)
         }
         return
       }
@@ -363,28 +362,28 @@ export class TelegramBotInteractiveService {
         const idx = parseInt(data.replace('sel_del_tw_', ''), 10)
         const targetTweet = session.recentTwCache?.[idx]
         if (!targetTweet || !targetTweet.id) {
-          await this.sendMessage(baseUrl, fromId, '⚠️ 未找到选中的推文，请重新点击 /delete 检索。')
+          await this.sendMessage(baseUrl, fromId, '[提示] 未找到选中的推文，请重新输入 /delete 检索。')
           return
         }
 
         const cleanId = String(targetTweet.id).trim()
         if (!cleanId || cleanId === 'undefined' || !/^\d+$/.test(cleanId)) {
-          await this.sendMessage(baseUrl, fromId, `❌ 无法删除：推文 ID 无效 ("${cleanId}")。`)
+          await this.sendMessage(baseUrl, fromId, `[失败] 无法删除：推文 ID 无效 ("${cleanId}")。`)
           return
         }
 
         const activeTwAcc = appStore.getAccounts().find((a) => a.platform === 'twitter' && a.status === 'active')
         if (!activeTwAcc) {
-          await this.sendMessage(baseUrl, fromId, '⚠️ 未找到活跃的 Twitter 账号。')
+          await this.sendMessage(baseUrl, fromId, '[提示] 未找到活跃的 Twitter 账号。')
           return
         }
 
         const res = await twitterDriver.deleteTweet(activeTwAcc, cleanId)
         if (res.success) {
-          await this.sendMessage(baseUrl, fromId, `✅ <b>已成功从 X (Twitter) 删除第 ${idx + 1} 条推文</b> (#${cleanId})！`, { parse_mode: 'HTML' })
+          await this.sendMessage(baseUrl, fromId, `<b>[删除成功]</b> 已成功从 X (Twitter) 删除第 ${idx + 1} 条推文 (#${cleanId})！`, { parse_mode: 'HTML' })
           session.recentTwCache.splice(idx, 1)
         } else {
-          await this.sendMessage(baseUrl, fromId, `❌ 删除第 ${idx + 1} 条推文 (#${cleanId}) 失败：${res.error}`)
+          await this.sendMessage(baseUrl, fromId, `[失败] 删除第 ${idx + 1} 条推文 (#${cleanId}) 失败：${res.error}`)
         }
         return
       }
@@ -403,7 +402,7 @@ export class TelegramBotInteractiveService {
 
       // --- Security Check: Blocked User Verification ---
       if (appStore.isBotUserBlocked(fromId)) {
-        const blockMsg = `🚫 <b>安全访问已被封锁 (Access Blocked)</b>\n\n你的 Telegram 账号由于连续 5 次输入错误匹配码已被系统永久封禁。\n\n如需解封，请在电脑端 Rosetta 桌面应用 ➔「电报机器人」中解封。`
+        const blockMsg = `<b>[安全访问已被封锁]</b>\n\n你的 Telegram 账号由于连续 5 次输入错误匹配码已被系统永久封禁。\n\n如需解封，请在电脑端 Rosetta 桌面应用中的「电报机器人」选项卡中解除封锁。`
         await this.sendMessage(baseUrl, fromId, blockMsg, { parse_mode: 'HTML' })
         return
       }
@@ -417,21 +416,21 @@ export class TelegramBotInteractiveService {
           appStore.addBotAuthorizedUserId(fromId)
           console.log(`[TelegramBotInteractive] User #${fromId} successfully paired with matching code!`)
 
-          const successMsg = `🎉 <b>配对成功！身份已通过安全校验并永久授权。</b>\n\n你的 Telegram User ID: <code>${fromId}</code>\n本端已记住你的身份，后续发帖无需重复校验密码。\n\n请在下方点击选择操作：`
+          const successMsg = `<b>[配对成功]</b> 身份已通过安全校验并永久授权。\n\n你的 Telegram User ID: <code>${fromId}</code>\n本端已记住你的身份，后续发帖无需重复校验密码。\n\n请在下方点击选择操作：`
 
           await this.sendMessage(baseUrl, fromId, successMsg, {
             parse_mode: 'HTML',
             reply_markup: {
               inline_keyboard: [
                 [
-                  { text: '𝕏 仅发往 Twitter (X)', callback_data: 'mode_twitter' },
-                  { text: '✈️ 仅发往 Telegram 频道', callback_data: 'mode_telegram' }
+                  { text: '[Twitter] 仅发往 Twitter (X)', callback_data: 'mode_twitter' },
+                  { text: '[Telegram] 仅发往 Telegram 频道', callback_data: 'mode_telegram' }
                 ],
                 [
-                  { text: '⚡ 两端同时广播 (X + TG)', callback_data: 'mode_both' }
+                  { text: '[双端广播] 两端同时发送 (X + TG)', callback_data: 'mode_both' }
                 ],
                 [
-                  { text: '🗑️ 撤回/删除历史贴文 (1~5选项卡)', callback_data: 'menu_delete' }
+                  { text: '[撤回删除] 查看历史贴文 (1~5选项卡)', callback_data: 'menu_delete' }
                 ]
               ]
             }
@@ -442,14 +441,14 @@ export class TelegramBotInteractiveService {
         // Record failed attempt
         const fails = appStore.recordBotPairingFailure(fromId)
         if (fails >= 5) {
-          const lockedMsg = `🚫 <b>错误次数达到上限，账号已封锁！</b>\n由于连续 5 次匹配码错误，你的 Telegram ID (<code>${fromId}</code>) 已被系统永久封锁。\n\n如需解封，请在电脑端 Rosetta 桌面应用中解除封锁。`
+          const lockedMsg = `<b>[安全封锁] 错误次数达到上限，账号已封锁！</b>\n由于连续 5 次匹配码错误，你的 Telegram ID (<code>${fromId}</code>) 已被系统永久封锁。\n\n如需解封，请在电脑端 Rosetta 桌面应用中解除封锁。`
           await this.sendMessage(baseUrl, fromId, lockedMsg, { parse_mode: 'HTML' })
           return
         }
 
         const remaining = 5 - fails
         // Prompt for pairing code
-        const lockMsg = `🔒 <b>Rosetta 主控端安全校验</b>\n\n该机器人已开启身份保护，防止未授权人员使用。\n\n首次使用请输入 Rosetta 桌面端生成的 <b>6位匹配授权码</b>：\n<i>（打开电脑端 Rosetta ➔「电报机器人」即可查看匹配码）</i>\n\n⚠️ 剩余尝试机会：<b>${remaining} / 5</b> 次，连续 5 次错误将自动封禁。`
+        const lockMsg = `<b>[Rosetta 主控端安全校验]</b>\n\n该机器人已开启身份保护，防止未授权人员使用。\n\n首次使用请输入 Rosetta 桌面端生成的 <b>6位匹配授权码</b>：\n<i>（打开电脑端 Rosetta ->「电报机器人」即可查看匹配码）</i>\n\n<b>[提示]</b> 剩余尝试机会：<b>${remaining} / 5</b> 次，连续 5 次错误将自动封禁。`
         await this.sendMessage(baseUrl, fromId, lockMsg, { parse_mode: 'HTML' })
         return
       }
@@ -468,22 +467,22 @@ export class TelegramBotInteractiveService {
       if (text === '/cancel') {
         session.step = 'idle'
         session.content = { text: '', mediaFiles: [] }
-        await this.sendMessage(baseUrl, fromId, '❌ 已重置并取消本次发布。发送 /start 可重新开始。')
+        await this.sendMessage(baseUrl, fromId, '[取消] 已重置并取消本次发布。发送 /start 可重新开始。')
         return
       }
 
       // Command: /delete
       if (text === '/delete' || text.startsWith('/delete')) {
-        await this.sendMessage(baseUrl, fromId, '🗑️ <b>请选择需要查看并撤回的历史平台：</b>\n（每次获取最近 5 条已发布贴文）', {
+        await this.sendMessage(baseUrl, fromId, '<b>[历史撤回] 请选择需要查看并撤回的历史平台：</b>\n（一次性获取最近 5 条已发布贴文并提供 1~5 选项卡选择）', {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
               [
-                { text: '✈️ 查看电报频道历史 (最近5条)', callback_data: 'del_hist_tg' },
-                { text: '𝕏 查看推特推文历史 (最近5条)', callback_data: 'del_hist_tw' }
+                { text: '[电报] 查看电报频道历史 (最近5条)', callback_data: 'del_hist_tg' },
+                { text: '[推特] 查看推特推文历史 (最近5条)', callback_data: 'del_hist_tw' }
               ],
               [
-                { text: '🔙 取消', callback_data: 'action_cancel' }
+                { text: '[取消]', callback_data: 'action_cancel' }
               ]
             ]
           }
@@ -496,24 +495,24 @@ export class TelegramBotInteractiveService {
         session.step = 'idle'
         session.content = { text: '', mediaFiles: [] }
 
-        const welcomeText = `👋 <b>欢迎使用 Rosetta 社交同步中枢机器人！</b>\n\n你可以直接在此私聊中发送图文或视频，由机器人代发至你的 <b>Telegram 频道</b> 或 <b>Twitter (X)</b>。\n\n请在下方点击选择操作：`
+        const welcomeText = `<b>[Rosetta 社交同步中枢机器人]</b>\n\n你可以直接在此私聊中发送图文或视频，由机器人代发至你的 <b>Telegram 频道</b> 或 <b>Twitter (X)</b>。\n\n请在下方点击选择操作：`
 
         await this.sendMessage(baseUrl, fromId, welcomeText, {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
               [
-                { text: '𝕏 仅发往 Twitter (X)', callback_data: 'mode_twitter' },
-                { text: '✈️ 仅发往 Telegram 频道', callback_data: 'mode_telegram' }
+                { text: '[Twitter] 仅发往 Twitter (X)', callback_data: 'mode_twitter' },
+                { text: '[Telegram] 仅发往 Telegram 频道', callback_data: 'mode_telegram' }
               ],
               [
-                { text: '⚡ 两端同时广播 (X + TG)', callback_data: 'mode_both' }
+                { text: '[双端广播] 两端同时发送 (X + TG)', callback_data: 'mode_both' }
               ],
               [
-                { text: '🗑️ 撤回/删除历史贴文 (每次5条)', callback_data: 'menu_delete' }
+                { text: '[撤回删除] 查看历史贴文 (1~5选项卡)', callback_data: 'menu_delete' }
               ],
               [
-                { text: '❌ 取消 / 重置', callback_data: 'action_cancel' }
+                { text: '[取消 / 重置]', callback_data: 'action_cancel' }
               ]
             ]
           }
@@ -572,29 +571,29 @@ export class TelegramBotInteractiveService {
         }
 
         if (!session.content.text && session.content.mediaFiles.length === 0) {
-          await this.sendMessage(baseUrl, fromId, '⚠️ 请发送文字内容，或附带图片/视频媒体。发送 /cancel 可取消。')
+          await this.sendMessage(baseUrl, fromId, '[提示] 请发送文字内容，或附带图片/视频媒体。发送 /cancel 可取消。')
           return
         }
 
         session.step = 'confirming'
 
         // Render confirmation card in Telegram
-        let modeLabel = '【⚡ 两端同时广播 (Twitter + Telegram)】'
-        if (session.mode === 'twitter') modeLabel = '【𝕏 仅发往 Twitter (X)】'
-        else if (session.mode === 'telegram') modeLabel = '【✈️ 仅发往 Telegram 频道】'
+        let modeLabel = '[两端同时广播] (Twitter + Telegram 频道)'
+        if (session.mode === 'twitter') modeLabel = '[仅发往 Twitter (X)]'
+        else if (session.mode === 'telegram') modeLabel = '[仅发往 Telegram 频道]'
 
         const textSnippet = session.content.text || '(无纯文字，仅包含媒体)'
         const mediaCount = session.content.mediaFiles.length
 
-        const confirmMsg = `📝 <b>内容已就绪，请核对：</b>\n\n📌 <b>目标：</b>${modeLabel}\n📄 <b>文字内容：</b>\n<blockquote>${this.escapeHtml(textSnippet)}</blockquote>\n🖼️ <b>媒体附件：</b>${mediaCount > 0 ? `已挂载 ${mediaCount} 项媒体` : '无附件'}\n\n确认无误请点击下方按钮立即发布：`
+        const confirmMsg = `<b>[内容已就绪，请核对]</b>\n\n<b>[目标平台]</b> ${modeLabel}\n<b>[文字内容]</b>\n<blockquote>${this.escapeHtml(textSnippet)}</blockquote>\n<b>[媒体附件]</b> ${mediaCount > 0 ? `已挂载 ${mediaCount} 项媒体` : '无附件'}\n\n确认无误请点击下方按钮立即发布：`
 
         await this.sendMessage(baseUrl, fromId, confirmMsg, {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
               [
-                { text: '🚀 确认发布', callback_data: 'confirm_publish' },
-                { text: '❌ 取消', callback_data: 'action_cancel' }
+                { text: '[确认发布]', callback_data: 'confirm_publish' },
+                { text: '[取消]', callback_data: 'action_cancel' }
               ]
             ]
           }
@@ -621,7 +620,7 @@ export class TelegramBotInteractiveService {
       timestamp: new Date().toISOString(),
       ruleId: 'tg_interactive_bot',
       sourceChannel: `@${this.botUsername || 'TelegramBot'} (用户私聊)`,
-      targetPlatform: mode === 'both' ? 'telegram' : mode,
+      targetPlatform: mode,
       originalText: content.text || (content.mediaFiles.length > 0 ? `[电报私聊提交 - 共 ${content.mediaFiles.length} 项媒体]` : '(Media Post)'),
       processedText: '正在由交互式机器人调度发布...',
       mediaCount: content.mediaFiles.length,
@@ -640,7 +639,7 @@ export class TelegramBotInteractiveService {
     if (mode === 'telegram' || mode === 'both') {
       const channelId = settings.defaultBotChatId || ''
       if (!channelId) {
-        results.push('❌ Telegram 频道发布失败：未在 Rosetta 中配置默认目标频道 ID (如 @my_channel)。')
+        results.push('[失败] Telegram 频道发布失败：未在 Rosetta 中配置默认目标频道 ID (如 @my_channel)。')
         hasFailure = true
       } else {
         const tgRes = await telegramBotDriver.sendPost({
@@ -655,9 +654,9 @@ export class TelegramBotInteractiveService {
         })
 
         if (tgRes.success) {
-          results.push(`✅ <b>Telegram 频道已发送</b>\n频道目标：<code>${channelId}</code>\n直达链接：${tgRes.postUrl || '(已成功入频)'}`)
+          results.push(`<b>[Telegram 频道已发送]</b>\n频道目标：<code>${channelId}</code>\n直达链接：${tgRes.postUrl || '(已成功入频)'}`)
         } else {
-          results.push(`❌ <b>Telegram 频道发送失败</b>\n原因：${tgRes.error}`)
+          results.push(`<b>[Telegram 频道发送失败]</b>\n原因：${tgRes.error}`)
           hasFailure = true
         }
       }
@@ -667,7 +666,7 @@ export class TelegramBotInteractiveService {
     if (mode === 'twitter' || mode === 'both') {
       const activeTwitterAccount = appStore.getAccounts().find((a) => a.platform === 'twitter' && a.status === 'active')
       if (!activeTwitterAccount) {
-        results.push('❌ Twitter 发布失败：未在 Rosetta 中绑定活跃的 X / Twitter 账号。')
+        results.push('[失败] Twitter 发布失败：未在 Rosetta 中绑定活跃的 X / Twitter 账号。')
         hasFailure = true
       } else {
         try {
@@ -692,13 +691,13 @@ export class TelegramBotInteractiveService {
           )
 
           if (publishRes.success) {
-            results.push(`✅ <b>Twitter (X) 推文已发布</b>\n账号：@${activeTwitterAccount.username}\n直达链接：${publishRes.url || '(发布成功)'}`)
+            results.push(`<b>[Twitter (X) 推文已发布]</b>\n账号：@${activeTwitterAccount.username}\n直达链接：${publishRes.url || '(发布成功)'}`)
           } else {
-            results.push(`❌ <b>Twitter 发布失败</b>\n原因：${publishRes.error}`)
+            results.push(`<b>[Twitter 发布失败]</b>\n原因：${publishRes.error}`)
             hasFailure = true
           }
         } catch (err: any) {
-          results.push(`❌ <b>Twitter 发布异常</b>\n原因：${err.message}`)
+          results.push(`<b>[Twitter 发布异常]</b>\n原因：${err.message}`)
           hasFailure = true
         }
       }
@@ -720,8 +719,8 @@ export class TelegramBotInteractiveService {
 
     // Reply final result to user in Telegram Chat
     const finalReply = hasFailure
-      ? `⚠️ <b>发布已完成 (部分失败)</b>\n\n${results.join('\n\n')}\n\n<i>发送 /start 可开启新的发帖。</i>`
-      : `🎉 <b>恭喜！全部发布成功！</b>\n\n${results.join('\n\n')}\n\n<i>随时发送 /start 即可继续发布下一条。</i>`
+      ? `<b>[发布完成] 部分平台发布失败：</b>\n\n${results.join('\n\n')}\n\n<i>发送 /start 可开启新的发帖。</i>`
+      : `<b>[发布完成] 全部发布成功！</b>\n\n${results.join('\n\n')}\n\n<i>随时发送 /start 即可继续发布下一条。</i>`
 
     await this.sendMessage(baseUrl, fromId, finalReply, { parse_mode: 'HTML' })
   }
