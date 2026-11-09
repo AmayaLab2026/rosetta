@@ -20,7 +20,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   const [twCt0, setTwCt0] = useState('')
   const [twLoading, setTwLoading] = useState(false)
 
-  // Telegram Bot Token state (pure Bot API, zero MTP)
+  // Telegram Bot Token state (pure Bot API)
   const [tgBotToken, setTgBotToken] = useState('')
   const [tgChatId, setTgChatId] = useState('')
   const [tgLoading, setTgLoading] = useState(false)
@@ -338,7 +338,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
         )}
       </div>
 
-      {/* Telegram Section (100% Bot API, Zero MTP) */}
+      {/* Telegram Section (Bot API) */}
       <div className="rounded-xl bg-surface border border-surface-border p-5 space-y-4 shadow-panel">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">

@@ -285,7 +285,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
                 {st.autoStart || '随软件启动自动开启监听'}
               </div>
               <div className="text-[11px] text-gray-500 mt-0.5">
-                {st.autoStartSub || '启动 Rosetta 时自动建立 Telegram MTProto 监听信道'}
+                {st.autoStartSub || '启动 Rosetta 时自动建立 Telegram 监听信道'}
               </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -310,7 +310,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
                   {st.destroySection || '安全与凭证销毁'}
                 </h2>
                 <p className="text-[11px] text-rose-700/80">
-                  {st.destroyDesc || '一键销毁 Telegram MTProto 凭据、手机号与 X 授权 Cookies，安全登出'}
+                  {st.destroyDesc || '一键销毁 Telegram 凭据、账号与 X 授权 Cookies，安全登出'}
                 </p>
               </div>
             </div>
@@ -318,7 +318,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
             <div className="text-xs text-rose-900/90 leading-relaxed max-w-lg">
-              销毁操作将清空本地密钥、移除全部关联社交账号并注销 Telegram MTProto 监听会话。
+              销毁操作将清空本地密钥、移除全部关联社交账号并注销 Telegram 监听会话。
             </div>
 
             <button
@@ -391,7 +391,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
                 </span>
               </div>
               <div className="text-[11px] text-gray-500 font-mono">
-                Electron {versionInfo.electron ? versionInfo.electron.split('.')[0] : '33'} • Node {versionInfo.node ? versionInfo.node.split('.')[0] : '20'} • React 18 • Vite 6 • GramJS MTProto • Tailwind CSS
+                Electron {versionInfo.electron ? versionInfo.electron.split('.')[0] : '33'} • Node {versionInfo.node ? versionInfo.node.split('.')[0] : '20'} • React 18 • Vite 6 • Tailwind CSS
               </div>
             </div>
 

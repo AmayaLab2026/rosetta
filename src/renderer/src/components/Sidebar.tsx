@@ -79,7 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="px-5 text-[11px] text-gray-500 font-mono space-y-1">
         <div className="flex items-center justify-between">
           <span>{t.sidebar.engineTitle}</span>
-          <span className="text-gray-700 font-medium">GramJS + X Web</span>
+          <span className="text-gray-700 font-medium">Telegram + X Web</span>
         </div>
       </div>
     </aside>

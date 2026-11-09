@@ -23,14 +23,13 @@ interface LogsViewProps {
 
 export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
   const { t } = useI18n()
-  const [filterStatus, setFilterStatus] = useState<'all' | 'processing' | 'success' | 'filtered' | 'deleted' | 'failed'>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'processing' | 'success' | 'filtered' | 'failed'>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const countProcessing = logs.filter((l) => l.status === 'processing').length
   const countSuccess = logs.filter((l) => l.status === 'success').length
   const countFiltered = logs.filter((l) => l.status === 'filtered').length
-  const countDeleted = logs.filter((l) => l.status === 'deleted').length
   const countFailed = logs.filter((l) => l.status === 'failed').length
 
   const filteredLogs = logs.filter((log) => {
@@ -86,7 +85,6 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
             { id: 'processing', label: t.logs.filterProcessing, count: countProcessing },
             { id: 'success', label: t.logs.filterSuccess, count: countSuccess },
             { id: 'filtered', label: t.logs.filterFiltered, count: countFiltered },
-            ...(countDeleted > 0 ? [{ id: 'deleted', label: t.logs.filterDeleted, count: countDeleted }] : []),
             { id: 'failed', label: t.logs.filterFailed, count: countFailed }
           ].map((item) => {
             const isSelected = filterStatus === item.id
@@ -209,12 +207,6 @@ export const LogsView: React.FC<LogsViewProps> = ({ logs, onClearLogs }) => {
                     <span className="flex items-center gap-1 text-[11px] text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-300 font-medium">
                       <Filter className="w-3 h-3 text-amber-600" />
                       <span>{t.studio.filtered}</span>
-                    </span>
-                  )}
-                  {log.status === 'deleted' && (
-                    <span className="flex items-center gap-1 text-[11px] text-purple-900 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-300 font-medium">
-                      <Trash2 className="w-3 h-3 text-purple-600" />
-                      <span>{t.studio.deleted}</span>
                     </span>
                   )}
                   {log.status === 'failed' && (

@@ -68,7 +68,7 @@ export interface MirrorLogItem {
   originalText: string
   processedText: string
   mediaCount: number
-  status: 'success' | 'failed' | 'filtered' | 'processing' | 'deleted'
+  status: 'success' | 'failed' | 'filtered' | 'processing'
   errorMessage?: string
   targetUrl?: string
   durationMs?: number
@@ -98,7 +98,6 @@ export interface TelegramBotSendPayload {
   chatId: string
   text: string
   botToken?: string
-  useMtproto?: boolean
   mediaFiles?: Array<{ dataBase64: string; name: string; type: string }>
 }
 
@@ -124,18 +123,6 @@ export interface TwitterPostItem {
   createdAt: string
   text: string
   url: string
-}
-
-export interface MirroredPostRecord {
-  id: string
-  ruleId: string
-  telegramChannelId: string
-  telegramChannelUsername?: string
-  telegramMessageId: number
-  targetPlatform: PlatformType
-  targetAccountId: string
-  targetTweetIds: string[]
-  createdAt: string
 }
 
 export interface UnifiedPostPayload {
@@ -195,7 +182,7 @@ export interface RosettaAPI {
 
   // Telegram Bot Operations
   sendTelegramBotPost: (payload: TelegramBotSendPayload) => Promise<{ success: boolean; messageId?: number; postUrl?: string; error?: string }>
-  deleteTelegramBotPost: (params: { chatId: string; messageId: number; botToken?: string; useMtproto?: boolean }) => Promise<{ success: boolean; error?: string }>
+  deleteTelegramBotPost: (params: { chatId: string; messageId: number; botToken?: string }) => Promise<{ success: boolean; error?: string }>
   getTelegramBotPosts: () => Promise<TelegramBotPostItem[]>
   clearTelegramBotPosts: () => Promise<boolean>
   verifyTelegramBotToken: (token: string) => Promise<{ valid: boolean; botName?: string; username?: string; avatarUrl?: string; error?: string }>

@@ -980,16 +980,20 @@ export class TwitterDriver {
       console.warn('[TwitterDriver] fetchRecentTweets via API failed:', e.message)
     }
 
-    // 3. Fallback: extract from locally tracked mirrored posts and composer logs
-    const mirrored = appStore
-      .getMirroredPosts()
-      .filter((m) => m.targetPlatform === 'twitter' && m.targetAccountId === account.id)
-    const recentTweetIds = Array.from(new Set(mirrored.flatMap((m) => m.targetTweetIds || [])))
-      .filter((tid) => tid && typeof tid === 'string' && /^\d+$/.test(tid))
-      .slice(-limit)
-      .reverse()
+    // 3. Fallback: extract from recent dispatch logs
+    const logs = appStore.getLogs().filter((l) => (l.targetPlatform === 'twitter' || l.targetPlatform === 'both') && l.status === 'success')
+    const recentTweetIds: string[] = []
+    for (const log of logs) {
+      if (log.targetUrl) {
+        const match = log.targetUrl.match(/status\/(\d+)/)
+        if (match && !recentTweetIds.includes(match[1])) {
+          recentTweetIds.push(match[1])
+        }
+      }
+    }
+    const finalIds = recentTweetIds.slice(-limit).reverse()
 
-    return recentTweetIds.map((tid) => ({
+    return finalIds.map((tid) => ({
       id: tid,
       createdAt: new Date().toISOString(),
       text: `推文 #${tid}`,

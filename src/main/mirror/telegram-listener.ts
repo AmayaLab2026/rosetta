@@ -522,25 +522,6 @@ export class TelegramMirrorService {
           if (publishRes.success) {
             rule.stats.totalForwarded += 1
             rule.stats.lastMirroredAt = new Date().toISOString()
-
-            // Track mapping for all message IDs in the album for forwarded tweet history
-            const targetTweetIds =
-              publishRes.tweetIds || (publishRes.tweetId ? [publishRes.tweetId] : [])
-            if (targetTweetIds.length > 0) {
-              for (const msgId of messageIds) {
-                appStore.saveMirroredPost({
-                  id: `mp_${Date.now()}_${msgId}_${Math.random().toString(36).substring(2, 6)}`,
-                  ruleId: rule.id,
-                  telegramChannelId: chatId,
-                  telegramChannelUsername: chatUsername,
-                  telegramMessageId: msgId,
-                  targetPlatform: 'twitter',
-                  targetAccountId: targetAccount.id,
-                  targetTweetIds,
-                  createdAt: new Date().toISOString()
-                })
-              }
-            }
           }
           appStore.saveRule(rule)
 
@@ -625,7 +606,7 @@ export class TelegramMirrorService {
           })
         }
       } catch (e: any) {
-        console.warn(`[TelegramMirrorService] MTProto getMessages failed for ${channelIdentifier}:`, e.message)
+        console.warn(`[TelegramMirrorService] Channel getMessages failed for ${channelIdentifier}:`, e.message)
       }
     }
 

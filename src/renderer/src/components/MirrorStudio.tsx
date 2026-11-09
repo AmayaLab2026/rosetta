@@ -306,12 +306,6 @@ export const MirrorStudio: React.FC<MirrorStudioProps> = ({
                           <span>{t.studio.filtered}</span>
                         </span>
                       )}
-                      {log.status === 'deleted' && (
-                        <span className="flex items-center gap-1 text-[11px] text-purple-900 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-300 font-medium">
-                          <Trash2 className="w-3 h-3 text-purple-600" />
-                          <span>{t.studio.deleted}</span>
-                        </span>
-                      )}
                       {log.status === 'failed' && (
                         <span className="flex items-center gap-1 text-[11px] text-rose-800 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-300 font-medium">
                           <AlertCircle className="w-3 h-3 text-rose-600" />

@@ -1,13 +1,12 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
-import { Account, MirrorRule, MirrorLogItem, MirroredPostRecord, AppSettings, TelegramBotPostItem } from '../../shared/types'
+import { Account, MirrorRule, MirrorLogItem, AppSettings, TelegramBotPostItem } from '../../shared/types'
 
 interface StoreData {
   accounts: Account[]
   rules: MirrorRule[]
   logs: MirrorLogItem[]
-  mirroredPosts: MirroredPostRecord[]
   botPosts?: TelegramBotPostItem[]
   botBlockedUserIds?: number[]
   botFailedAttempts?: Record<string, number>
@@ -18,7 +17,6 @@ const DEFAULT_STORE: StoreData = {
   accounts: [],
   rules: [],
   logs: [],
-  mirroredPosts: [],
   botPosts: [],
   botBlockedUserIds: [],
   botFailedAttempts: {},
@@ -58,8 +56,7 @@ export class AppStore {
         const parsed = JSON.parse(raw)
         return {
           ...DEFAULT_STORE,
-          ...parsed,
-          mirroredPosts: parsed.mirroredPosts || []
+          ...parsed
         }
       }
     } catch (e) {
@@ -188,21 +185,6 @@ export class AppStore {
   public clearLogs(): void {
     this.data.logs = []
     this.persist(true)
-  }
-
-  // --- Mirrored Posts Tracking ---
-  public getMirroredPosts(): MirroredPostRecord[] {
-    return this.data.mirroredPosts || []
-  }
-
-  public saveMirroredPost(record: MirroredPostRecord): void {
-    if (!this.data.mirroredPosts) this.data.mirroredPosts = []
-    this.data.mirroredPosts.push(record)
-    // Keep max 3,000 mappings
-    if (this.data.mirroredPosts.length > 3000) {
-      this.data.mirroredPosts = this.data.mirroredPosts.slice(-3000)
-    }
-    this.persist()
   }
 
   // --- Telegram Bot Posts ---
