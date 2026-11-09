@@ -39,8 +39,7 @@ export class TelegramMirrorService {
   >()
 
   public getStatus() {
-    const isActuallyConnected = Boolean(this.client && (this.client as any).connected)
-    const running = Boolean(this.isRunning && isActuallyConnected)
+    const running = Boolean(this.isRunning && this.client && !(this.client as any)._destroyed)
     const rules = appStore.getRules().filter((r) => r.enabled)
     return {
       running,

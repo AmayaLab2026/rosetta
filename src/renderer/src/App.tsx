@@ -171,11 +171,18 @@ function RosettaMain() {
           )}
 
           {currentTab === 'composer' && (
-            <Composer accounts={accounts} onOpenLogs={() => setCurrentTab('logs')} />
+            <Composer
+              accounts={accounts}
+              onOpenLogs={() => setCurrentTab('logs')}
+              onOpenBotSettings={() => setCurrentTab('bot')}
+            />
           )}
 
           {currentTab === 'bot' && (
-            <TelegramBotStudio accounts={accounts} />
+            <TelegramBotStudio
+              accounts={accounts}
+              onGoComposer={() => setCurrentTab('composer')}
+            />
           )}
 
           {currentTab === 'rules' && (

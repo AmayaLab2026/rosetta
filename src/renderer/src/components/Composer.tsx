@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Account } from '../../../shared/types'
+import { Account, AppSettings } from '../../../shared/types'
 import {
   Send,
   CheckCircle2,
@@ -13,42 +13,65 @@ import {
   Zap,
   ArrowRight,
   UploadCloud,
-  FileVideo
+  FileVideo,
+  Bot,
+  Settings
 } from 'lucide-react'
 import { useI18n } from '../i18n'
 
 interface ComposerProps {
   accounts: Account[]
   onOpenLogs?: () => void
+  onOpenBotSettings?: () => void
 }
 
-export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
-  const { t } = useI18n()
+export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs, onOpenBotSettings }) => {
+  const { t, language } = useI18n()
+  const isZh = language === 'zh'
+
   const [text, setText] = useState('')
   const [mediaFiles, setMediaFiles] = useState<Array<{ dataBase64: string; name: string; type: string }>>([])
   const [splitThread, setSplitThread] = useState(true)
-  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([])
+
+  // Multi-target selections: Twitter & Telegram
+  const [sendToTwitter, setSendToTwitter] = useState(true)
+  const [sendToTelegram, setSendToTelegram] = useState(true)
+  const [botConfig, setBotConfig] = useState<{ token?: string; chatId?: string }>({})
+
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submittingStage, setSubmittingStage] = useState<string>('')
   const [elapsedSec, setElapsedSec] = useState<number>(0)
   const [isDragging, setIsDragging] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
-  const [resultMsg, setResultMsg] = useState<{
-    type: 'success' | 'error'
-    text: string
+  const [resultItems, setResultItems] = useState<Array<{
+    platform: 'twitter' | 'telegram'
+    success: boolean
     url?: string
-    durationMs?: number
-  } | null>(null)
+    error?: string
+  }>>([])
+  const [publishDuration, setPublishDuration] = useState<number | null>(null)
 
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const twitterAccounts = accounts.filter((a) => a.platform === 'twitter' && a.status === 'active')
+  const activeTwitterAccount = twitterAccounts[0]
 
-  // Auto select first twitter account if none selected
+  // Load Bot settings for Telegram posting
   useEffect(() => {
-    if (selectedAccountIds.length === 0 && twitterAccounts.length > 0) {
-      setSelectedAccountIds([twitterAccounts[0].id])
-    }
-  }, [twitterAccounts])
+    window.rosetta.getSettings?.().then((st) => {
+      if (st) {
+        setBotConfig({
+          token: st.defaultBotToken,
+          chatId: st.defaultBotChatId
+        })
+        // If bot is configured, enable telegram by default
+        if (st.defaultBotToken && st.defaultBotChatId) {
+          setSendToTelegram(true)
+        } else {
+          setSendToTelegram(false)
+        }
+      }
+    }).catch(() => {})
+  }, [])
 
   // Timer ticker during submission for instant feedback
   useEffect(() => {
@@ -105,7 +128,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
   }, [text, willThread])
 
   const processFileList = (files: File[]) => {
-    const remainingSlots = 12 - mediaFiles.length
+    const remainingSlots = 10 - mediaFiles.length
     for (const file of files.slice(0, remainingSlots)) {
       const reader = new FileReader()
       reader.onload = () => {
@@ -151,24 +174,28 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
   }
 
   const handlePublish = async () => {
-    if ((!text.trim() && mediaFiles.length === 0) || selectedAccountIds.length === 0) return
+    if ((!text.trim() && mediaFiles.length === 0)) return
+    if (!sendToTwitter && !sendToTelegram) return
+
     setIsSubmitting(true)
-    setResultMsg(null)
-    setSubmittingStage(mediaFiles.length > 0 ? `正在并发上传 ${mediaFiles.length} 项附件...` : '正在签名并调度发布...')
+    setResultItems([])
+    setPublishDuration(null)
+    setSubmittingStage(mediaFiles.length > 0 ? `正在并发上传 ${mediaFiles.length} 项媒体附件...` : '正在调度跨平台聚合发布...')
 
     const publishStart = Date.now()
 
     try {
-      const targets = selectedAccountIds.map((id) => ({
-        platform: 'twitter' as const,
-        accountId: id
-      }))
+      const targets: Array<{ platform: 'twitter' | 'telegram'; accountId: string }> = []
 
-      // Stage ticker for visual delight
-      if (mediaFiles.length > 0) {
-        setTimeout(() => {
-          setSubmittingStage('正在动态计算 x-client-transaction-id...')
-        }, 300)
+      if (sendToTwitter && activeTwitterAccount) {
+        targets.push({ platform: 'twitter', accountId: activeTwitterAccount.id })
+      }
+
+      if (sendToTelegram) {
+        targets.push({
+          platform: 'telegram',
+          accountId: botConfig.chatId || 'default'
+        })
       }
 
       const res = await window.rosetta.sendUnifiedPost({
@@ -179,23 +206,24 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
       })
 
       const totalDuration = Date.now() - publishStart
+      setPublishDuration(totalDuration)
+
+      if (res.results) {
+        setResultItems(res.results)
+      }
 
       if (res.success) {
-        const firstSuccess = res.results.find((r) => r.success)
-        setResultMsg({
-          type: 'success',
-          text: t.composer.publishSuccess,
-          url: firstSuccess?.url,
-          durationMs: totalDuration
-        })
         setText('')
         setMediaFiles([])
-      } else {
-        const err = res.results.find((r) => r.error)?.error || '发布失败，请检查网络或账号状态'
-        setResultMsg({ type: 'error', text: err, durationMs: totalDuration })
       }
     } catch (err: any) {
-      setResultMsg({ type: 'error', text: err.message || '执行发布发生异常' })
+      setResultItems([
+        {
+          platform: 'twitter',
+          success: false,
+          error: err.message || '发布过程发生未处理异常'
+        }
+      ])
     } finally {
       setIsSubmitting(false)
       setSubmittingStage('')
@@ -208,54 +236,88 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
     setTimeout(() => setCopiedLink(false), 2000)
   }
 
+  const hasTargets = (sendToTwitter && activeTwitterAccount) || (sendToTelegram && botConfig.token && botConfig.chatId)
+
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto h-full overflow-y-auto">
-      {/* Title & Account Picker */}
+    <div className="p-6 space-y-6 max-w-4xl mx-auto h-full overflow-y-auto font-sans">
+      {/* Title & Cross-platform Targets Picker */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-base font-semibold text-foreground font-mono tracking-tight">{t.composer.title}</h2>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-brand-subtle text-brand border border-brand-border/60">
-              极速直连
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-brand-subtle text-brand border border-brand-border/60">
+              {isZh ? '聚合多端广播' : 'Cross-Platform Broadcast'}
             </span>
           </div>
-          <p className="text-xs text-gray-500 font-mono mt-0.5">{t.composer.desc}</p>
+          <p className="text-xs text-gray-500 font-mono mt-0.5">
+            {isZh
+              ? '支持单选或同时勾选推特与电报，实现一键图文/视频多平台瞬时分发'
+              : 'Publish to Twitter, Telegram, or broadcast to both simultaneously'}
+          </p>
         </div>
 
-        {/* Account selector pills */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {twitterAccounts.map((acc) => {
-            const isSelected = selectedAccountIds.includes(acc.id)
-            return (
-              <button
-                key={acc.id}
-                onClick={() => {
-                  setSelectedAccountIds(
-                    isSelected
-                      ? selectedAccountIds.filter((id) => id !== acc.id)
-                      : [...selectedAccountIds, acc.id]
-                  )
-                }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition-all border ${
-                  isSelected
-                    ? 'bg-brand-subtle text-brand border-brand-border shadow-2xs font-semibold ring-1 ring-brand/30'
-                    : 'bg-surface border-surface-border text-gray-600 hover:text-foreground hover:bg-surface-hover'
-                }`}
-              >
-                {acc.avatarUrl ? (
-                  <img src={acc.avatarUrl} alt="" className="w-4 h-4 rounded-full object-cover shrink-0 shadow-2xs" />
-                ) : (
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand" />
-                )}
-                <span>@{acc.username}</span>
-              </button>
-            )
-          })}
-          {twitterAccounts.length === 0 && (
-            <span className="text-xs font-mono text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
-              {t.composer.noTwitterAcc}
+        {/* Destination Target Pills */}
+        <div className="flex items-center gap-2 flex-wrap font-mono text-xs">
+          {/* Target: Twitter */}
+          <button
+            type="button"
+            onClick={() => setSendToTwitter(!sendToTwitter)}
+            disabled={!activeTwitterAccount}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
+              sendToTwitter && activeTwitterAccount
+                ? 'bg-sky-50 text-sky-900 border-sky-300 shadow-2xs font-semibold ring-1 ring-sky-300/40'
+                : 'bg-surface border-surface-border text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <span className="w-4 h-4 rounded bg-black text-white flex items-center justify-center font-bold text-[10px]">𝕏</span>
+            <span>{activeTwitterAccount ? `@${activeTwitterAccount.username}` : (isZh ? '推特未绑定' : 'X Unlinked')}</span>
+            <span className={`w-2 h-2 rounded-full ${sendToTwitter && activeTwitterAccount ? 'bg-sky-500' : 'bg-gray-300'}`} />
+          </button>
+
+          {/* Target: Telegram Bot */}
+          <button
+            type="button"
+            onClick={() => {
+              if (!botConfig.token || !botConfig.chatId) {
+                onOpenBotSettings?.()
+              } else {
+                setSendToTelegram(!sendToTelegram)
+              }
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
+              sendToTelegram && botConfig.token && botConfig.chatId
+                ? 'bg-telegram-subtle text-telegram font-semibold border-telegram-border shadow-2xs ring-1 ring-telegram/30'
+                : 'bg-surface border-surface-border text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5 text-telegram" />
+            <span>
+              {botConfig.chatId
+                ? `TG: ${botConfig.chatId}`
+                : isZh
+                ? '电报 (点击配置)'
+                : 'TG (Setup)'}
             </span>
-          )}
+            <span
+              className={`w-2 h-2 rounded-full ${
+                sendToTelegram && botConfig.token && botConfig.chatId ? 'bg-telegram' : 'bg-gray-300'
+              }`}
+            />
+          </button>
+
+          {/* Both Quick Switch */}
+          <button
+            type="button"
+            onClick={() => {
+              const enableBoth = !sendToTwitter || !sendToTelegram
+              setSendToTwitter(enableBoth)
+              setSendToTelegram(enableBoth)
+            }}
+            className="px-2 py-1.5 rounded-lg border border-surface-border bg-surface hover:bg-surface-hover text-gray-600 hover:text-foreground text-[11px] transition-colors"
+            title="同时选中两个平台"
+          >
+            {isZh ? '两端同步' : 'Both'}
+          </button>
         </div>
       </div>
 
@@ -273,7 +335,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
         {isDragging && (
           <div className="absolute inset-0 bg-brand-subtle/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 rounded-xl border-2 border-dashed border-brand text-brand font-mono text-xs">
             <UploadCloud className="w-8 h-8 animate-bounce" />
-            <span className="font-semibold text-sm">释放文件以添加为推文多媒体附件</span>
+            <span className="font-semibold text-sm">释放文件以添加为广播多媒体附件</span>
             <span className="text-[11px] opacity-80">支持批量图片 (JPG/PNG/WebP) 与视频 (MP4/WebM)</span>
           </div>
         )}
@@ -284,15 +346,16 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
           placeholder={t.composer.placeholder}
           rows={6}
           disabled={isSubmitting}
-          className="w-full bg-background/40 border border-surface-border rounded-lg p-3.5 text-sm text-foreground placeholder-gray-400 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/30 focus:bg-surface transition-all resize-none font-sans leading-relaxed"
+          className="w-full bg-background/40 border border-surface-border rounded-lg p-3.5 text-sm text-foreground placeholder-gray-400 focus:outline-hidden focus:border-brand focus:ring-1 focus:ring-brand/30 focus:bg-surface transition-all resize-none leading-relaxed font-sans"
         />
 
         {/* Media Attachments Preview Grid */}
         {mediaFiles.length > 0 && (
-          <div className="space-y-2 pt-1">
-            <div className="flex items-center justify-between text-[11px] font-mono text-gray-500">
-              <span>已选媒体附件 ({mediaFiles.length}/12)</span>
+          <div className="space-y-2 pt-1 font-mono">
+            <div className="flex items-center justify-between text-[11px] text-gray-500">
+              <span>已选媒体附件 ({mediaFiles.length}/10)</span>
               <button
+                type="button"
                 onClick={() => setMediaFiles([])}
                 className="text-gray-400 hover:text-rose-600 transition-colors"
               >
@@ -317,6 +380,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
                     <img src={f.dataBase64} alt={f.name} className="w-full h-full object-cover" />
                   )}
                   <button
+                    type="button"
                     onClick={() => setMediaFiles((prev) => prev.filter((_, idx) => idx !== i))}
                     className="absolute top-1 right-1 bg-black/60 hover:bg-rose-600 text-white rounded-full p-1 transition-colors opacity-90 group-hover:opacity-100 shadow-sm"
                     title="移除此项"
@@ -354,14 +418,14 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
             {/* Media Attachment Upload Button */}
             <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-border hover:border-gray-400 bg-surface text-gray-700 hover:text-foreground cursor-pointer text-xs font-mono transition-all shadow-2xs hover:bg-surface-hover active:scale-95">
               <ImageIcon className="w-3.5 h-3.5 text-brand" />
-              <span>添加附件 ({mediaFiles.length}/12)</span>
+              <span>添加附件 ({mediaFiles.length}/10)</span>
               <input
                 type="file"
                 accept="image/*,video/*"
                 multiple
                 onChange={handleFileSelect}
                 className="hidden"
-                disabled={mediaFiles.length >= 12 || isSubmitting}
+                disabled={mediaFiles.length >= 10 || isSubmitting}
               />
             </label>
 
@@ -393,7 +457,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
               <span className="text-gray-400 text-[11px]">/ 280</span>
             </div>
 
-            {charCount > 280 && (
+            {charCount > 280 && sendToTwitter && (
               <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -414,7 +478,7 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
             disabled={
               isSubmitting ||
               (!text.trim() && mediaFiles.length === 0) ||
-              selectedAccountIds.length === 0
+              !hasTargets
             }
             className="flex items-center justify-center gap-2 px-5 py-2 rounded-lg bg-brand hover:bg-brand-hover text-white text-xs font-mono font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-glow-terracotta active:scale-[0.98]"
           >
@@ -422,99 +486,107 @@ export const Composer: React.FC<ComposerProps> = ({ accounts, onOpenLogs }) => {
             <span>
               {isSubmitting
                 ? `发布中 (${elapsedSec}s)...`
+                : sendToTwitter && sendToTelegram
+                ? (isZh ? '一键同时发布至推特与电报' : 'Broadcast to X & Telegram')
+                : sendToTelegram
+                ? (isZh ? '发布至 Telegram 频道' : 'Publish to Telegram')
                 : t.composer.broadcastBtn}
             </span>
           </button>
         </div>
       </div>
 
-      {/* Result Card */}
-      {resultMsg && (
-        <div
-          className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono shadow-panel transition-all ${
-            resultMsg.type === 'success'
-              ? 'bg-emerald-50/90 text-emerald-900 border-emerald-300'
-              : 'bg-rose-50/90 text-rose-900 border-rose-300'
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            {resultMsg.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            )}
-            <div className="space-y-0.5">
-              <span className="font-semibold block">{resultMsg.text}</span>
-              {resultMsg.durationMs && (
-                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700">
-                  <Zap className="w-2.5 h-2.5" />
-                  <span>响应耗时 {resultMsg.durationMs < 1000 ? `${resultMsg.durationMs}ms` : `${(resultMsg.durationMs / 1000).toFixed(2)}s`}</span>
-                </span>
+      {/* Multi-Target Result Cards */}
+      {resultItems.length > 0 && (
+        <div className="space-y-2.5 font-mono text-xs">
+          {resultItems.map((item, idx) => (
+            <div
+              key={idx}
+              className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-panel transition-all ${
+                item.success
+                  ? 'bg-emerald-50/90 text-emerald-900 border-emerald-300'
+                  : 'bg-rose-50/90 text-rose-900 border-rose-300'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                {item.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <div>
+                  <span className="font-bold mr-2 uppercase">
+                    [{item.platform === 'telegram' ? 'Telegram' : 'X (Twitter)'}]
+                  </span>
+                  <span>{item.success ? (isZh ? '发布成功' : 'Published Successfully') : item.error}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                {item.url && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => copyUrl(item.url!)}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors text-[11px]"
+                      title="复制链接"
+                    >
+                      {copiedLink ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedLink ? '已复制' : '复制链接'}</span>
+                    </button>
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 px-3 py-1 rounded bg-brand text-white hover:bg-brand-hover font-semibold text-[11px] transition-all shadow-2xs"
+                    >
+                      <span>{item.platform === 'telegram' ? '在 Telegram 查看' : t.composer.openOnX}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {publishDuration && (
+            <div className="flex items-center justify-between text-[11px] text-gray-500 px-1">
+              <span className="flex items-center gap-1 text-emerald-700 font-semibold">
+                <Zap className="w-3 h-3" />
+                <span>总耗时: {publishDuration < 1000 ? `${publishDuration}ms` : `${(publishDuration / 1000).toFixed(2)}s`}</span>
+              </span>
+
+              {onOpenLogs && (
+                <button
+                  type="button"
+                  onClick={onOpenLogs}
+                  className="text-gray-600 hover:text-foreground underline flex items-center gap-1"
+                >
+                  <span>查看活动流水</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
               )}
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            {resultMsg.url && (
-              <>
-                <button
-                  onClick={() => copyUrl(resultMsg.url!)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors text-[11px]"
-                  title="复制推文链接"
-                >
-                  {copiedLink ? (
-                    <>
-                      <Check className="w-3 h-3 text-emerald-600" />
-                      <span>已复制</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3" />
-                      <span>复制链接</span>
-                    </>
-                  )}
-                </button>
-                <a
-                  href={resultMsg.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1 px-3 py-1 rounded bg-brand text-white hover:bg-brand-hover font-semibold text-[11px] transition-all shadow-2xs"
-                >
-                  <span>{t.composer.openOnX}</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </>
-            )}
-
-            {onOpenLogs && (
-              <button
-                onClick={onOpenLogs}
-                className="flex items-center gap-1 text-gray-600 hover:text-foreground text-[11px] underline ml-1"
-              >
-                <span>查看流水</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
-            )}
-          </div>
+          )}
         </div>
       )}
 
       {/* Thread Split Preview Sequence */}
-      {previewChunks.length > 1 && (
-        <div className="rounded-xl bg-surface border border-surface-border p-4 space-y-3 shadow-panel">
-          <div className="flex items-center justify-between text-xs font-mono text-gray-700">
+      {previewChunks.length > 1 && sendToTwitter && (
+        <div className="rounded-xl bg-surface border border-surface-border p-4 space-y-3 shadow-panel font-mono">
+          <div className="flex items-center justify-between text-xs text-gray-700">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-brand" />
               <span className="font-semibold uppercase tracking-wider">{t.composer.threadPreview}</span>
             </div>
-            <span className="text-[11px] text-gray-500 font-mono">共 {previewChunks.length} 条推文串接</span>
+            <span className="text-[11px] text-gray-500">共 {previewChunks.length} 条推文串接</span>
           </div>
 
           <div className="space-y-2.5">
             {previewChunks.map((chunk, idx) => (
               <div
                 key={idx}
-                className="p-3.5 rounded-lg bg-surface-muted/50 border border-surface-border text-xs font-mono text-gray-800 whitespace-pre-wrap relative pl-9 surface-hover-card"
+                className="p-3.5 rounded-lg bg-surface-muted/50 border border-surface-border text-xs text-gray-800 whitespace-pre-wrap relative pl-9 surface-hover-card"
               >
                 <span className="absolute left-3 top-3 text-[10px] text-brand font-bold bg-brand-subtle px-1 rounded border border-brand-border/40">
                   #{idx + 1}

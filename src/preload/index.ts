@@ -44,6 +44,7 @@ const api: RosettaAPI = {
   deleteTelegramBotPost: (params) => ipcRenderer.invoke('telegram:bot-delete', params),
   getTelegramBotPosts: () => ipcRenderer.invoke('telegram:bot-get-posts'),
   clearTelegramBotPosts: () => ipcRenderer.invoke('telegram:bot-clear-posts'),
+  verifyTelegramBotToken: (token) => ipcRenderer.invoke('telegram:bot-verify-token', token),
 
   // Settings & System
   getSettings: () => ipcRenderer.invoke('settings:get'),

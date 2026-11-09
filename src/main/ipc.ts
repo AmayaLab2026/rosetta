@@ -196,6 +196,70 @@ export function registerIpcHandlers(): void {
     const results: Array<{ platform: 'telegram' | 'twitter'; success: boolean; url?: string; error?: string }> = []
 
     for (const target of payload.targets) {
+      if (target.platform === 'telegram') {
+        const startTime = Date.now()
+        const logId = `log_composer_tg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+        const hasMedia = payload.mediaFiles && payload.mediaFiles.length > 0
+        const settings = appStore.getSettings()
+        const targetChatId = target.accountId || settings.defaultBotChatId || ''
+
+        const logItem: MirrorLogItem = {
+          id: logId,
+          timestamp: new Date().toISOString(),
+          ruleId: 'composer',
+          sourceChannel: '统一发帖器 (Composer)',
+          targetPlatform: 'telegram',
+          originalText: payload.text || (hasMedia ? `[多媒体消息 - 共 ${payload.mediaFiles!.length} 项]` : '(Media Post)'),
+          processedText: `正在通过 Bot API 推送至 Telegram (${targetChatId})...`,
+          mediaCount: payload.mediaFiles?.length || 0,
+          status: 'processing'
+        }
+
+        appStore.addLog(logItem)
+        const { BrowserWindow } = require('electron')
+        BrowserWindow.getAllWindows().forEach((win: any) => {
+          if (!win.isDestroyed() && win.webContents) {
+            win.webContents.send('mirror:log-added', logItem)
+          }
+        })
+
+        try {
+          const res = await telegramBotDriver.sendPost({
+            chatId: targetChatId,
+            text: payload.text,
+            botToken: settings.defaultBotToken,
+            mediaFiles: payload.mediaFiles
+          })
+          results.push({ platform: 'telegram', success: res.success, url: res.postUrl, error: res.error })
+
+          const durationMs = Date.now() - startTime
+          logItem.status = res.success ? 'success' : 'failed'
+          logItem.processedText = res.success ? (payload.text || `已成功推送至电报频道 ${targetChatId}`) : (res.error || '电报发布失败')
+          logItem.errorMessage = res.error
+          logItem.targetUrl = res.postUrl
+          logItem.durationMs = durationMs
+          appStore.addLog(logItem)
+          BrowserWindow.getAllWindows().forEach((win: any) => {
+            if (!win.isDestroyed() && win.webContents) {
+              win.webContents.send('mirror:log-added', logItem)
+            }
+          })
+        } catch (tgErr: any) {
+          const durationMs = Date.now() - startTime
+          logItem.status = 'failed'
+          logItem.errorMessage = tgErr?.message || '电报发布异常'
+          logItem.durationMs = durationMs
+          appStore.addLog(logItem)
+          BrowserWindow.getAllWindows().forEach((win: any) => {
+            if (!win.isDestroyed() && win.webContents) {
+              win.webContents.send('mirror:log-added', logItem)
+            }
+          })
+          results.push({ platform: 'telegram', success: false, error: tgErr?.message || '电报发布异常' })
+        }
+        continue
+      }
+
       const account = appStore.getAccount(target.accountId)
       if (!account) {
         results.push({
@@ -428,5 +492,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('telegram:bot-clear-posts', () => {
     appStore.clearBotPosts()
     return true
+  })
+
+  ipcMain.handle('telegram:bot-verify-token', (_, token: string) => {
+    return telegramBotDriver.verifyBotToken(token)
   })
 }

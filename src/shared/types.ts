@@ -193,6 +193,7 @@ export interface RosettaAPI {
   deleteTelegramBotPost: (params: { chatId: string; messageId: number; botToken?: string; useMtproto?: boolean }) => Promise<{ success: boolean; error?: string }>
   getTelegramBotPosts: () => Promise<TelegramBotPostItem[]>
   clearTelegramBotPosts: () => Promise<boolean>
+  verifyTelegramBotToken: (token: string) => Promise<{ valid: boolean; botName?: string; username?: string; error?: string }>
 
   // Settings & System
   getSettings: () => Promise<AppSettings>
