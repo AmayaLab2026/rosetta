@@ -10,13 +10,6 @@ const api: RosettaAPI = {
   refreshAccountProfile: (id) => ipcRenderer.invoke('accounts:refresh-profile', id),
   openTwitterInteractiveLogin: () => ipcRenderer.invoke('twitter:interactive-login'),
 
-  // Telegram Auth
-  requestTelegramAuthCode: async (req) => {
-    await ipcRenderer.invoke('telegram:prepare-auth', req)
-    return ipcRenderer.invoke('telegram:request-code', req)
-  },
-  submitTelegramAuthCode: (req) => ipcRenderer.invoke('telegram:submit-code', req),
-
   // Mirror Rules
   getMirrorRules: () => ipcRenderer.invoke('rules:get'),
   saveMirrorRule: (rule) => ipcRenderer.invoke('rules:save', rule),

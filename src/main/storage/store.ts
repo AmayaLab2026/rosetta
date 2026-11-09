@@ -368,9 +368,12 @@ export class AppStore {
   // --- Security & Credential Destruction ---
   public destroyCredentials(): void {
     this.data.accounts = []
-    this.data.settings.telegramApiId = undefined
-    this.data.settings.telegramApiHash = undefined
-    this.data.settings.telegramPhone = undefined
+    this.data.settings.defaultBotToken = undefined
+    this.data.settings.defaultBotChatId = undefined
+    this.data.settings.botPairingCode = undefined
+    this.data.settings.botAuthorizedUserIds = []
+    this.data.botBlockedUserIds = []
+    this.data.botFailedAttempts = {}
     this.persist(true)
   }
 }

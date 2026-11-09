@@ -300,46 +300,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ engineRunning, accou
           </div>
         </section>
 
-        {/* Telegram Credentials Review */}
-        <section className="bg-surface-card border border-surface-border rounded-xl p-5 shadow-xs space-y-4">
-          <div className="border-b border-surface-border/60 pb-3 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-brand" />
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">
-                {st.credentialsSection || 'Telegram 凭据与安全'}
-              </h2>
-              <p className="text-[11px] text-gray-500">
-                {st.credentialsDesc || '已保存的 MTProto 身份凭据 (保存在本地配置)'}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 text-xs font-mono">
-            <div className="bg-surface-muted/50 border border-surface-border/70 rounded-lg p-3">
-              <div className="text-[10px] text-gray-400 font-sans uppercase">API ID</div>
-              <div className="text-foreground font-semibold mt-1">
-                {settings.telegramApiId || (tgAccount?.config as any)?.apiId || st.notConfigured}
-              </div>
-            </div>
-
-            <div className="bg-surface-muted/50 border border-surface-border/70 rounded-lg p-3">
-              <div className="text-[10px] text-gray-400 font-sans uppercase">API Hash</div>
-              <div className="text-foreground font-semibold mt-1">
-                {settings.telegramApiHash
-                  ? `${settings.telegramApiHash.substring(0, 4)}••••••••`
-                  : st.notConfigured}
-              </div>
-            </div>
-
-            <div className="bg-surface-muted/50 border border-surface-border/70 rounded-lg p-3">
-              <div className="text-[10px] text-gray-400 font-sans uppercase">{st.boundPhone}</div>
-              <div className="text-foreground font-semibold mt-1">
-                {settings.telegramPhone || tgAccount?.displayName || st.notConfigured}
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* Security & Credential Destruction */}
         <section className="bg-rose-50/50 border border-rose-200/80 rounded-xl p-5 shadow-xs space-y-4">
           <div className="border-b border-rose-200/60 pb-3 flex items-center justify-between">

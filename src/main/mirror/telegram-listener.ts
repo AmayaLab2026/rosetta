@@ -1,5 +1,4 @@
 import { TelegramClient, Api } from 'telegram'
-import { computeCheck } from 'telegram/Password'
 import { StringSession } from 'telegram/sessions'
 import { NewMessage } from 'telegram/events'
 import { DeletedMessage } from 'telegram/events/DeletedMessage'
@@ -8,7 +7,7 @@ import { BrowserWindow } from 'electron'
 import { appStore } from '../storage/store'
 import { twitterDriver } from '../drivers/twitter'
 import { ContentPipeline } from './pipeline'
-import { Account, MirrorLogItem, TelegramAuthCodeSubmit, TelegramAuthRequest } from '../../shared/types'
+import { Account, MirrorLogItem } from '../../shared/types'
 
 export interface MediaItem {
   buffer: Buffer
@@ -20,7 +19,7 @@ export class TelegramMirrorService {
   private client: TelegramClient | null = null
   private isRunning: boolean = false
   private authClient: TelegramClient | null = null
-  private twitterCheckInterval: NodeJS.Timeout | null = null
+  private selfSentCache = new Map<string, number>()
   private albumBuffers = new Map<
     string,
     {
@@ -38,6 +37,37 @@ export class TelegramMirrorService {
     }
   >()
 
+  public markSelfSentMessage(chatId: string, messageId: number, text?: string): void {
+    const normChat = (chatId || '').replace(/^-100/, '').replace(/^@/, '').toLowerCase().trim()
+    this.selfSentCache.set(`${normChat}_${messageId}`, Date.now())
+    if (text && text.trim()) {
+      const snippet = text.trim().slice(0, 80)
+      this.selfSentCache.set(`${normChat}_text_${snippet}`, Date.now())
+    }
+
+    // Clean up entries older than 2 hours
+    const now = Date.now()
+    for (const [k, time] of this.selfSentCache.entries()) {
+      if (now - time > 2 * 3600 * 1000) {
+        this.selfSentCache.delete(k)
+      }
+    }
+  }
+
+  public isSelfSentMessage(chatId: string, messageId: number, text?: string): boolean {
+    const normChat = (chatId || '').replace(/^-100/, '').replace(/^@/, '').toLowerCase().trim()
+    if (this.selfSentCache.has(`${normChat}_${messageId}`)) {
+      return true
+    }
+    if (text && text.trim()) {
+      const snippet = text.trim().slice(0, 80)
+      if (this.selfSentCache.has(`${normChat}_text_${snippet}`)) {
+        return true
+      }
+    }
+    return false
+  }
+
   public getStatus() {
     const running = Boolean(this.isRunning && this.client && !(this.client as any)._destroyed)
     const rules = appStore.getRules().filter((r) => r.enabled)
@@ -50,94 +80,6 @@ export class TelegramMirrorService {
 
   public getClient(): TelegramClient | null {
     return this.client
-  }
-
-  /**
-   * Request Telegram login code via SMS or Telegram App
-   */
-  async requestCode(req: TelegramAuthRequest): Promise<{ phoneCodeHash: string }> {
-    const session = new StringSession('')
-    this.authClient = new TelegramClient(session, req.apiId, req.apiHash, {
-      connectionRetries: 5
-    })
-    await this.authClient.connect()
-
-    const { phoneCodeHash } = await this.authClient.sendCode(
-      {
-        apiId: req.apiId,
-        apiHash: req.apiHash
-      },
-      req.phoneNumber
-    )
-
-    return { phoneCodeHash }
-  }
-
-  /**
-   * Complete Telegram login with SMS/App code
-   */
-  async submitCode(
-    authInfo: TelegramAuthRequest,
-    submit: TelegramAuthCodeSubmit
-  ): Promise<Account> {
-    if (!this.authClient) {
-      throw new Error('当前没有活跃的 Telegram 验证会话，请先获取验证码。')
-    }
-
-    try {
-      await this.authClient.invoke(
-        new Api.auth.SignIn({
-          phoneNumber: submit.phoneNumber,
-          phoneCodeHash: submit.phoneCodeHash,
-          phoneCode: submit.code.trim()
-        })
-      )
-    } catch (err: any) {
-      if (err.errorMessage === 'SESSION_PASSWORD_NEEDED') {
-        if (!submit.password) {
-          throw new Error('该 Telegram 账号开启了两步验证 (2FA)，请输入两步验证密码后再点击完成。')
-        }
-        const passwordSrpResult = await this.authClient.invoke(new Api.account.GetPassword())
-        const passwordSrpCheck = await computeCheck(passwordSrpResult, submit.password.trim())
-        await this.authClient.invoke(
-          new Api.auth.CheckPassword({
-            password: passwordSrpCheck
-          })
-        )
-      } else {
-        let msg = err.errorMessage || err.message || 'Telegram 验证失败'
-        if (msg === 'PHONE_CODE_INVALID') {
-          msg = '验证码错误 (PHONE_CODE_INVALID)，请核对后重试'
-        } else if (msg === 'PHONE_CODE_EXPIRED') {
-          msg = '验证码已过期 (PHONE_CODE_EXPIRED)，请返回重新获取'
-        } else if (msg === 'PASSWORD_HASH_INVALID') {
-          msg = '两步验证密码错误 (PASSWORD_HASH_INVALID)，请核对后重试'
-        }
-        throw new Error(msg)
-      }
-    }
-
-    const me = (await this.authClient.getMe()) as any
-    const sessionString = (this.authClient.session.save() as unknown) as string
-
-    const account: Account = {
-      id: `tg_${me.id}`,
-      platform: 'telegram',
-      username: me.username ? `@${me.username}` : me.phone || `${me.id}`,
-      displayName: [me.firstName, me.lastName].filter(Boolean).join(' ') || 'Telegram User',
-      status: 'active',
-      lastChecked: new Date().toISOString(),
-      credentials: {
-        apiId: authInfo.apiId,
-        apiHash: authInfo.apiHash,
-        sessionString,
-        phoneNumber: submit.phoneNumber
-      }
-    }
-
-    appStore.saveAccount(account)
-    this.authClient = null
-    return account
   }
 
   /**
@@ -186,7 +128,7 @@ export class TelegramMirrorService {
         }
       }, new NewMessage({}))
 
-      // Register deleted message listener (Auto-delete mirrored posts)
+      // Register deleted message listener (Decoupled mapping cleanup)
       this.client.addEventHandler(async (event: any) => {
         try {
           await this.handleDeletedMessages(event)
@@ -194,9 +136,6 @@ export class TelegramMirrorService {
           console.error('[Mirror] Error handling deleted messages:', err)
         }
       }, new DeletedMessage({}))
-
-      // Start bidirectional deletion checker (X -> TG)
-      this.startBidirectionalDeletionChecker()
 
       this.notifyStatusChange()
       return true
@@ -212,7 +151,6 @@ export class TelegramMirrorService {
    * Stop Telegram mirror listener
    */
   async stop(): Promise<boolean> {
-    this.stopBidirectionalDeletionChecker()
     if (this.client) {
       try {
         await this.client.disconnect()
@@ -242,6 +180,27 @@ export class TelegramMirrorService {
     const chatId = chat?.id?.toString() || ''
     const chatTitle = chat?.title || chatUsername || 'Channel'
     const messageDate = message.date ? new Date(message.date * 1000) : new Date()
+
+    // 1. Anti-Echo Guard: Check if this message was sent directly by Rosetta to prevent dual-broadcast duplicate posts on Twitter
+    if (
+      this.isSelfSentMessage(chatUsername, message.id, rawText) ||
+      this.isSelfSentMessage(chatId, message.id, rawText)
+    ) {
+      console.log(`[Mirror] Suppressed self-sent message #${message.id} in "${chatTitle}" to prevent dual-broadcast duplicate post on Twitter.`)
+      return
+    }
+
+    // 2. Anti-Echo Guard: Check if message author is the configured Rosetta Bot
+    const botToken = appStore.getSettings().defaultBotToken || ''
+    const botIdMatch = botToken.match(/^(\d+):/)
+    if (botIdMatch) {
+      const botId = botIdMatch[1]
+      const senderId = message.fromId?.userId?.toString() || message.senderId?.toString() || message.fromId?.toString() || ''
+      if (senderId && senderId === botId) {
+        console.log(`[Mirror] Suppressed message #${message.id} authored by Rosetta Bot (${botId}) to prevent echo loop.`)
+        return
+      }
+    }
 
     // Determine the attribution source (Forward origin, or current channel)
     let attributionSource: { username?: string; name?: string } = {}
@@ -276,9 +235,14 @@ export class TelegramMirrorService {
       }
     }
 
-    // Download media buffer if present (supports photos, videos, gifs, voice/audio)
+    // Download media buffer if present (supports photos, videos, gifs; filters out stickers/emojis)
     let downloadedMedia: MediaItem | null = null
-    if (message.media && this.client) {
+    const isSticker =
+      Boolean(message.sticker) ||
+      message.media?.document?.mimeType === 'application/x-tgsticker' ||
+      message.media?.document?.attributes?.some((a: any) => a.className === 'DocumentAttributeSticker')
+
+    if (message.media && this.client && !isSticker) {
       try {
         const isDocVideo =
           Boolean(message.video) ||
@@ -612,7 +576,9 @@ export class TelegramMirrorService {
   }
 
   /**
-   * Handle deleted messages from Telegram channels and automatically delete mirrored posts
+   * Handle deleted messages from Telegram channels.
+   * Completely decoupled: Telegram deletion will NOT cascade delete tweets on Twitter.
+   * Only cleans up local tracking records to prevent phantom references.
    */
   private async handleDeletedMessages(event: any): Promise<void> {
     const deletedIds: number[] = event.deletedIds || (event.id ? [event.id] : [])
@@ -627,129 +593,18 @@ export class TelegramMirrorService {
 
     console.log(
       `[Mirror] Telegram delete event detected for IDs: [${deletedIds.join(', ')}] in channel: ${
-        channelId || 'all/global'
-      }`
+        channelId || 'all'
+      } (Decoupled: no Twitter cascading deletion)`
     )
 
     for (const msgId of deletedIds) {
-      // Find mirrored post mappings
       let matchedRecords = channelId
         ? appStore.findMirroredPostsByTelegram(channelId, msgId)
         : []
-
-      // Fallback: check by msgId if channelId not provided in update
       if (matchedRecords.length === 0) {
         matchedRecords = appStore.findMirroredPostsByMessageId(msgId)
       }
-
-      if (matchedRecords.length === 0) continue
-
       for (const record of matchedRecords) {
-        const rule = appStore.getRule(record.ruleId)
-        if (rule && rule.filters.autoSyncDeletion === false) {
-          console.log(`[Mirror] Rule "${rule.name}" has autoSyncDeletion disabled, skipping.`)
-          continue
-        }
-
-        const targetAccount = appStore.getAccount(record.targetAccountId)
-        if (!targetAccount) continue
-
-        if (record.targetPlatform === 'twitter' && record.targetTweetIds?.length > 0) {
-          console.log(
-            `[Mirror] Auto-deleting mirrored Twitter post [${record.targetTweetIds.join(
-              ', '
-            )}] for Telegram msg #${msgId}`
-          )
-
-          const delRes = await twitterDriver.deleteThread(targetAccount, record.targetTweetIds)
-
-          const logId = `log_del_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
-          this.emitLog({
-            id: logId,
-            timestamp: new Date().toISOString(),
-            ruleId: record.ruleId,
-            sourceChannel: record.telegramChannelUsername || record.telegramChannelId || 'Telegram Channel',
-            targetPlatform: 'twitter',
-            originalText: `[消息被撤回/删除] 源电报频道删除了消息 #${msgId}`,
-            processedText: `[自动同步删除] 已在 X / Twitter 上删除对应的 ${delRes.deletedCount} 条推文`,
-            mediaCount: 0,
-            status: 'deleted'
-          })
-
-          appStore.deleteMirroredPost(record.id)
-        }
-      }
-    }
-  }
-
-  private startBidirectionalDeletionChecker(): void {
-    if (this.twitterCheckInterval) clearInterval(this.twitterCheckInterval)
-    // Check every 15 seconds if mirrored tweets were deleted on X
-    this.twitterCheckInterval = setInterval(async () => {
-      if (!this.isRunning || !this.client) return
-      try {
-        await this.checkTwitterDeletions()
-      } catch (err) {
-        console.warn('[Mirror] Error during deletion sync check:', err)
-      }
-    }, 15000)
-  }
-
-  private stopBidirectionalDeletionChecker(): void {
-    if (this.twitterCheckInterval) {
-      clearInterval(this.twitterCheckInterval)
-      this.twitterCheckInterval = null
-    }
-  }
-
-  /**
-   * Scan mirrored posts: if tweet was deleted on X, delete corresponding message in Telegram!
-   */
-  async checkTwitterDeletions(): Promise<void> {
-    const mirrored = appStore.getMirroredPosts()
-    if (mirrored.length === 0) return
-
-    // Check recent mirrored posts
-    const recent = mirrored.slice(-25)
-
-    for (const record of recent) {
-      const rule = appStore.getRule(record.ruleId)
-      if (rule && rule.filters.autoSyncDeletion === false) continue
-
-      const targetAccount = appStore.getAccount(record.targetAccountId)
-      if (!targetAccount || targetAccount.platform !== 'twitter') continue
-
-      const primaryTweetId = record.targetTweetIds?.[0]
-      if (!primaryTweetId) continue
-
-      const exists = await twitterDriver.checkTweetExists(targetAccount, primaryTweetId)
-      if (!exists) {
-        console.log(
-          `[Mirror] Detected tweet ${primaryTweetId} was deleted on X! Sync-deleting TG message #${record.telegramMessageId}...`
-        )
-
-        // Delete from Telegram channel
-        const tgDeleted = await this.deleteTelegramMessage(
-          record.telegramChannelId || record.telegramChannelUsername || '',
-          record.telegramMessageId
-        )
-
-        const logId = `log_bi_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
-        this.emitLog({
-          id: logId,
-          timestamp: new Date().toISOString(),
-          ruleId: record.ruleId,
-          sourceChannel: record.telegramChannelUsername || record.telegramChannelId || 'Telegram Channel',
-          targetPlatform: 'telegram',
-          originalText: `[双向同步撤回] X / Twitter 上的推文已删除`,
-          processedText: tgDeleted
-            ? `[自动同步撤回] 已从 Telegram 频道撤回对应消息 #${record.telegramMessageId}`
-            : `[撤回完成] 检测到 X 推文已删除，已同步清理映射记录`,
-          mediaCount: 0,
-          status: 'deleted'
-        })
-
-        // Remove mapping from store
         appStore.deleteMirroredPost(record.id)
       }
     }

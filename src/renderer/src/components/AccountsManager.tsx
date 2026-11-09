@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Account } from '../../../shared/types'
-import { CheckCircle2, AlertCircle, RefreshCw, Trash2, Globe, ExternalLink } from 'lucide-react'
+import { CheckCircle2, AlertCircle, RefreshCw, Trash2, Globe, ExternalLink, Bot, KeyRound, Check } from 'lucide-react'
 import { useI18n } from '../i18n'
 
 interface AccountsManagerProps {
@@ -20,24 +20,19 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   const [twCt0, setTwCt0] = useState('')
   const [twLoading, setTwLoading] = useState(false)
 
-  // Telegram state
-  const [tgApiId, setTgApiId] = useState('')
-  const [tgApiHash, setTgApiHash] = useState('')
-  const [tgPhone, setTgPhone] = useState('')
-  const [tgPhoneCodeHash, setTgPhoneCodeHash] = useState<string | null>(null)
-  const [tgCode, setTgCode] = useState('')
-  const [tgPassword, setTgPassword] = useState('')
+  // Telegram Bot Token state (pure Bot API, zero MTP)
+  const [tgBotToken, setTgBotToken] = useState('')
+  const [tgChatId, setTgChatId] = useState('')
   const [tgLoading, setTgLoading] = useState(false)
-  const [tgStep, setTgStep] = useState<'initial' | 'code'>('initial')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
+  const [savedSuccess, setSavedSuccess] = useState(false)
 
   useEffect(() => {
     window.rosetta.getSettings?.().then((settings) => {
       if (settings) {
-        if (settings.telegramApiId) setTgApiId(String(settings.telegramApiId))
-        if (settings.telegramApiHash) setTgApiHash(settings.telegramApiHash)
-        if (settings.telegramPhone) setTgPhone(settings.telegramPhone)
+        if (settings.defaultBotToken) setTgBotToken(settings.defaultBotToken)
+        if (settings.defaultBotChatId) setTgChatId(settings.defaultBotChatId)
       }
     }).catch(() => {})
   }, [])
@@ -54,7 +49,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   }, [accounts])
 
   const twitterAccount = accounts.find((a) => a.platform === 'twitter')
-  const telegramAccount = accounts.find((a) => a.platform === 'telegram')
+  const telegramBotAccount = accounts.find((a) => a.platform === 'telegram')
 
   // Interactive Twitter Login
   const handleTwitterInteractive = async () => {
@@ -100,59 +95,61 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
         setShowTwitterManual(false)
         setTwAuthToken('')
         setTwCt0('')
+        onAccountUpdated()
       } else {
-        setErrorMsg(health.error || 'Invalid Twitter cookies')
+        setErrorMsg(health.error || 'Cookies verification failed')
       }
-      onAccountUpdated()
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to save Twitter account')
+      setErrorMsg(err.message || 'Failed to save account')
     } finally {
       setTwLoading(false)
     }
   }
 
-  // Telegram Code Request
-  const handleTgRequestCode = async (e: React.FormEvent) => {
+  // Telegram Bot Token Save & Verify
+  const handleSaveTelegramBot = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!tgApiId || !tgApiHash || !tgPhone) return
+    if (!tgBotToken.trim()) return
 
     setTgLoading(true)
     setErrorMsg(null)
-    try {
-      const res = await window.rosetta.requestTelegramAuthCode({
-        apiId: parseInt(tgApiId.trim(), 10),
-        apiHash: tgApiHash.trim(),
-        phoneNumber: tgPhone.trim()
-      })
-      setTgPhoneCodeHash(res.phoneCodeHash)
-      setTgStep('code')
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to request Telegram code')
-    } finally {
-      setTgLoading(false)
-    }
-  }
+    setSavedSuccess(false)
 
-  // Telegram Code Submit
-  const handleTgSubmitCode = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!tgPhoneCodeHash || !tgCode) return
-
-    setTgLoading(true)
-    setErrorMsg(null)
     try {
-      await window.rosetta.submitTelegramAuthCode({
-        phoneNumber: tgPhone.trim(),
-        phoneCodeHash: tgPhoneCodeHash,
-        code: tgCode.trim(),
-        password: tgPassword.trim() || undefined
+      // 1. Verify token with official Telegram API
+      const res = await window.rosetta.verifyTelegramBotToken(tgBotToken.trim())
+      if (!res.valid) {
+        setErrorMsg(res.error || t.bot.tokenInvalid)
+        setTgLoading(false)
+        return
+      }
+
+      // 2. Persist in settings
+      await window.rosetta.saveSettings({
+        defaultBotToken: tgBotToken.trim(),
+        defaultBotChatId: tgChatId.trim() || undefined
       })
-      setTgStep('initial')
-      setTgCode('')
-      setTgPassword('')
+
+      // 3. Save as platform account
+      const botAccount: Account = {
+        id: `tg_bot_${Date.now()}`,
+        platform: 'telegram',
+        username: res.username ? `@${res.username}` : 'telegram_bot',
+        displayName: res.botName || 'Telegram Bot',
+        status: 'active',
+        lastChecked: new Date().toISOString(),
+        credentials: {
+          botToken: tgBotToken.trim(),
+          isBot: true
+        }
+      }
+      await window.rosetta.saveAccount(botAccount)
+
+      setSavedSuccess(true)
+      setTimeout(() => setSavedSuccess(false), 2000)
       onAccountUpdated()
     } catch (err: any) {
-      setErrorMsg(err.message || 'Telegram code verification failed')
+      setErrorMsg(err.message || 'Failed to connect Telegram Bot')
     } finally {
       setTgLoading(false)
     }
@@ -304,7 +301,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                     value={twAuthToken}
                     onChange={(e) => setTwAuthToken(e.target.value)}
                     placeholder="e.g. 841f3..."
-                    className="w-full bg-surface border border-surface-border rounded px-3 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:border-brand"
+                    className="w-full bg-surface border border-surface-border rounded px-3 py-1.5 text-xs text-foreground font-mono focus:outline-hidden focus:border-brand"
                   />
                 </div>
 
@@ -318,7 +315,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                     value={twCt0}
                     onChange={(e) => setTwCt0(e.target.value)}
                     placeholder="e.g. 5219ab..."
-                    className="w-full bg-surface border border-surface-border rounded px-3 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:border-brand"
+                    className="w-full bg-surface border border-surface-border rounded px-3 py-1.5 text-xs text-foreground font-mono focus:outline-hidden focus:border-brand"
                   />
                 </div>
 
@@ -335,33 +332,33 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
         )}
       </div>
 
-      {/* Telegram Section */}
+      {/* Telegram Section (100% Bot API, Zero MTP) */}
       <div className="rounded-xl bg-surface border border-surface-border p-5 space-y-4 shadow-panel">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-telegram-subtle border border-telegram-border flex items-center justify-center font-bold text-xs text-telegram">
-              TG
+              <Bot className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-xs font-semibold text-foreground font-mono">{t.accounts.telegramTitle}</h3>
+              <h3 className="text-xs font-semibold text-foreground font-mono">Telegram 机器人 (Bot API)</h3>
               <p className="text-[11px] text-gray-500 font-mono">
-                {t.accounts.telegramDesc}
+                通过官方 HTTP Bot API 直连，免去繁琐手机验证码，用于接收私聊指令与频道发帖
               </p>
             </div>
           </div>
 
-          {telegramAccount && (
+          {telegramBotAccount && (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleVerify(telegramAccount.id)}
-                title={t.accounts.connectedMtproto}
-                disabled={refreshingId === telegramAccount.id}
+                onClick={() => handleVerify(telegramBotAccount.id)}
+                title="Refresh Status"
+                disabled={refreshingId === telegramBotAccount.id}
                 className="p-1.5 rounded-lg text-gray-600 hover:text-foreground hover:bg-surface-hover border border-surface-border transition-colors disabled:opacity-50"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${refreshingId === telegramAccount.id ? 'animate-spin text-telegram' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshingId === telegramBotAccount.id ? 'animate-spin text-telegram' : ''}`} />
               </button>
               <button
-                onClick={() => handleDelete(telegramAccount.id)}
+                onClick={() => handleDelete(telegramBotAccount.id)}
                 title="Disconnect"
                 className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 border border-surface-border"
               >
@@ -371,155 +368,82 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
           )}
         </div>
 
-        {telegramAccount ? (
+        {telegramBotAccount ? (
           <div className="p-4 rounded-xl bg-surface-muted/60 border border-surface-border flex items-center justify-between shadow-2xs surface-hover-card">
             <div className="flex items-center gap-3">
-              {telegramAccount.avatarUrl ? (
-                <img
-                  src={telegramAccount.avatarUrl}
-                  alt={telegramAccount.username}
-                  onError={(e) => { e.currentTarget.style.display = 'none' }}
-                  className="w-10 h-10 rounded-full border border-surface-border object-cover shadow-2xs"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-telegram/15 text-telegram flex items-center justify-center font-bold text-sm border border-telegram/20">
-                  {telegramAccount.username[0]?.toUpperCase() || 'T'}
-                </div>
-              )}
+              <div className="w-10 h-10 rounded-full bg-telegram-subtle border border-telegram-border/60 flex items-center justify-center font-bold text-lg text-telegram shadow-2xs">
+                🤖
+              </div>
               <div className="space-y-0.5">
-                <p className="text-xs font-semibold text-foreground">{telegramAccount.displayName}</p>
-                <p className="text-[11px] font-mono text-gray-500">{telegramAccount.username}</p>
+                <p className="text-xs font-semibold text-foreground">{telegramBotAccount.displayName}</p>
+                <p className="text-[11px] font-mono text-gray-500">{telegramBotAccount.username}</p>
               </div>
             </div>
 
             <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs flex items-center gap-1 font-medium">
               <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-              {t.accounts.connectedMtproto}
+              <span>官方 Bot API 已就绪</span>
             </span>
           </div>
         ) : (
-          <div>
-            {tgStep === 'initial' ? (
-              <form onSubmit={handleTgRequestCode} className="space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-mono text-gray-600 block mb-1">
-                      {t.accounts.apiIdLabel}
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      value={tgApiId}
-                      onChange={(e) => setTgApiId(e.target.value)}
-                      placeholder="e.g. 1234567"
-                      className="w-full bg-background border border-surface-border rounded-lg px-3 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:border-brand"
-                    />
-                  </div>
+          <form onSubmit={handleSaveTelegramBot} className="space-y-3 font-mono text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] text-gray-600 block mb-1 font-semibold">
+                  Telegram Bot Token (来自 @BotFather) *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={tgBotToken}
+                  onChange={(e) => setTgBotToken(e.target.value)}
+                  placeholder="e.g. 123456789:ABCdefGhIJKlmNoPQRstuVWXyz"
+                  className="w-full bg-background border border-surface-border rounded-lg px-3 py-1.5 text-xs text-foreground font-mono focus:outline-hidden focus:border-brand"
+                />
+              </div>
 
-                  <div>
-                    <label className="text-[11px] font-mono text-gray-600 block mb-1">
-                      {t.accounts.apiHashLabel}
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={tgApiHash}
-                      onChange={(e) => setTgApiHash(e.target.value)}
-                      placeholder="e.g. 0123456789abcdef0123456789abcdef"
-                      className="w-full bg-background border border-surface-border rounded-lg px-3 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:border-brand"
-                    />
-                  </div>
-                </div>
+              <div>
+                <label className="text-[11px] text-gray-600 block mb-1 font-semibold">
+                  默认目标频道 ID 或 @username
+                </label>
+                <input
+                  type="text"
+                  value={tgChatId}
+                  onChange={(e) => setTgChatId(e.target.value)}
+                  placeholder="e.g. @my_channel or -100123456789"
+                  className="w-full bg-background border border-surface-border rounded-lg px-3 py-1.5 text-xs text-foreground font-mono focus:outline-hidden focus:border-brand"
+                />
+              </div>
+            </div>
 
-                <div>
-                  <label className="text-[11px] font-mono text-gray-600 block mb-1">
-                    {t.accounts.phoneLabel}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={tgPhone}
-                    onChange={(e) => setTgPhone(e.target.value)}
-                    placeholder="+86..."
-                    className="w-full bg-background border border-surface-border rounded-lg px-3 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:border-brand"
-                  />
-                </div>
+            <div className="flex items-center justify-between pt-1">
+              <a
+                href="https://t.me/BotFather"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-telegram hover:underline font-semibold flex items-center gap-1"
+              >
+                <span>直达 @BotFather 创建机器人 ➔</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
 
-                <div className="flex items-center justify-between pt-1">
-                  <a
-                    href="https://my.telegram.org/apps"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] font-mono text-telegram hover:underline flex items-center gap-1 font-medium"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    {t.accounts.howToGetApi}
-                  </a>
-
-                  <button
-                    type="submit"
-                    disabled={tgLoading}
-                    className="px-4 py-2 rounded-lg bg-brand hover:bg-brand-hover text-white text-xs font-mono font-medium shadow-glow-terracotta transition-all"
-                  >
-                    {tgLoading ? t.accounts.sendingCode : t.accounts.requestCode}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleTgSubmitCode} className="space-y-3">
-                <p className="text-xs font-mono text-gray-700">
-                  {t.accounts.codeSentTo} <span className="text-telegram font-semibold">{tgPhone}</span>
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-mono text-gray-600 block mb-1">
-                      {t.accounts.verifyCodeLabel}
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={tgCode}
-                      onChange={(e) => setTgCode(e.target.value)}
-                      placeholder="e.g. 12345"
-                      className="w-full bg-background border border-surface-border rounded-lg px-3 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:border-brand"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-mono text-gray-600 block mb-1">
-                      {t.accounts.twoFaLabel}
-                    </label>
-                    <input
-                      type="password"
-                      value={tgPassword}
-                      onChange={(e) => setTgPassword(e.target.value)}
-                      placeholder="Optional 2FA password"
-                      className="w-full bg-background border border-surface-border rounded-lg px-3 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:border-brand"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setTgStep('initial')}
-                    className="text-xs font-mono text-gray-500 hover:text-foreground"
-                  >
-                    {t.accounts.backToEditPhone}
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={tgLoading}
-                    className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-mono font-medium shadow-sm"
-                  >
-                    {tgLoading ? t.accounts.verifying : t.accounts.completeLogin}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
+              <div className="flex items-center gap-2">
+                {savedSuccess && (
+                  <span className="text-emerald-700 font-semibold flex items-center gap-1 text-[11px]">
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>连接成功</span>
+                  </span>
+                )}
+                <button
+                  type="submit"
+                  disabled={tgLoading || !tgBotToken.trim()}
+                  className="px-4 py-1.5 rounded-lg bg-brand hover:bg-brand-hover text-white font-medium disabled:opacity-50 transition-all shadow-glow-terracotta active:scale-95"
+                >
+                  {tgLoading ? '验证中...' : '连接并保存 Bot'}
+                </button>
+              </div>
+            </div>
+          </form>
         )}
       </div>
     </div>

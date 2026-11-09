@@ -87,7 +87,11 @@ export class ContentPipeline {
       result = result.replace(/#[a-zA-Z0-9_\u4e00-\u9fa5]+/gi, '')
     }
 
-    // 5. Custom replacements
+    // 5. Filter out Telegram custom emoji placeholder tokens & sticker artifacts
+    result = result.replace(/\[(?:Custom Emoji|Emoji|Sticker)[^\]]*\]/gi, '')
+    result = result.replace(/<tg-emoji[^>]*>.*?<\/tg-emoji>/gi, '')
+
+    // 6. Custom replacements
     if (config.customReplacements && config.customReplacements.length > 0) {
       for (const item of config.customReplacements) {
         if (item.from) {

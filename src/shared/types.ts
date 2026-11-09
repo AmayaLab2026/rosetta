@@ -152,23 +152,7 @@ export interface UnifiedPostPayload {
   }
 }
 
-export interface TelegramAuthRequest {
-  apiId: number
-  apiHash: string
-  phoneNumber: string
-}
-
-export interface TelegramAuthCodeSubmit {
-  phoneNumber: string
-  phoneCodeHash: string
-  code: string
-  password?: string
-}
-
 export interface AppSettings {
-  telegramApiId?: number
-  telegramApiHash?: string
-  telegramPhone?: string
   autoStartEngineOnLaunch?: boolean
   openAtLogin?: boolean
   minimizeToTray?: boolean
@@ -187,10 +171,6 @@ export interface RosettaAPI {
   checkAccountHealth: (id: string) => Promise<{ status: Account['status']; error?: string }>
   refreshAccountProfile: (id: string) => Promise<Account>
   openTwitterInteractiveLogin: () => Promise<{ success: boolean; account?: Account; error?: string }>
-
-  // Telegram Auth
-  requestTelegramAuthCode: (req: TelegramAuthRequest) => Promise<{ phoneCodeHash: string }>
-  submitTelegramAuthCode: (req: TelegramAuthCodeSubmit) => Promise<Account>
 
   // Mirror Rules
   getMirrorRules: () => Promise<MirrorRule[]>

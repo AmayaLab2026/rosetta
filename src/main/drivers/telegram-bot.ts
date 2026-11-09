@@ -1,4 +1,5 @@
 import { appStore } from '../storage/store'
+import { telegramMirrorService } from '../mirror/telegram-listener'
 import { TelegramBotPostItem, TelegramBotSendPayload } from '../../shared/types'
 
 export class TelegramBotDriver {
@@ -181,6 +182,9 @@ export class TelegramBotDriver {
       }
 
       const postUrl = this.formatTelegramUrl(cleanChatId, sentMessageId)
+
+      // Suppress echo loop in mirror listener so dual-broadcast doesn't post duplicate tweets
+      telegramMirrorService.markSelfSentMessage(cleanChatId, sentMessageId, cleanText)
 
       // Save to bot posts history for one-click revocation
       appStore.saveBotPost({

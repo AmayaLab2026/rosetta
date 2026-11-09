@@ -9,8 +9,6 @@ import { ContentPipeline } from './mirror/pipeline'
 import {
   Account,
   MirrorRule,
-  TelegramAuthCodeSubmit,
-  TelegramAuthRequest,
   UnifiedPostPayload
 } from '../shared/types'
 
@@ -61,19 +59,27 @@ export function registerIpcHandlers(): void {
         return { status: 'expired', error: res.error }
       }
     } else if (acc.platform === 'telegram') {
-      try {
-        const profile = await telegramMirrorService.fetchUserProfile(acc)
-        if (profile.displayName || profile.avatarUrl) {
-          acc.status = 'active'
-          if (profile.displayName) acc.displayName = profile.displayName
-          if (profile.avatarUrl) acc.avatarUrl = profile.avatarUrl
-          acc.lastChecked = new Date().toISOString()
-          appStore.saveAccount(acc)
-          return { status: 'active' }
+      const token = acc.credentials?.botToken || appStore.getSettings().defaultBotToken || ''
+      if (token) {
+        try {
+          const res = await telegramBotDriver.verifyBotToken(token)
+          if (res.valid) {
+            acc.status = 'active'
+            if (res.botName) acc.displayName = res.botName
+            if (res.username) acc.username = `@${res.username}`
+            acc.lastChecked = new Date().toISOString()
+            appStore.saveAccount(acc)
+            return { status: 'active' }
+          } else {
+            acc.status = 'error'
+            appStore.saveAccount(acc)
+            return { status: 'error', error: res.error }
+          }
+        } catch (e: any) {
+          return { status: 'error', error: e.message }
         }
-      } catch (e: any) {
-        return { status: 'error', error: e.message }
       }
+      return { status: 'error', error: 'No Bot Token configured' }
     }
 
     return { status: acc.status }
@@ -91,11 +97,17 @@ export function registerIpcHandlers(): void {
       acc.lastChecked = new Date().toISOString()
       appStore.saveAccount(acc)
     } else if (acc.platform === 'telegram') {
-      const profile = await telegramMirrorService.fetchUserProfile(acc)
-      if (profile.displayName) acc.displayName = profile.displayName
-      if (profile.avatarUrl) acc.avatarUrl = profile.avatarUrl
-      acc.lastChecked = new Date().toISOString()
-      appStore.saveAccount(acc)
+      const token = acc.credentials?.botToken || appStore.getSettings().defaultBotToken || ''
+      if (token) {
+        const res = await telegramBotDriver.verifyBotToken(token)
+        if (res.valid) {
+          if (res.botName) acc.displayName = res.botName
+          if (res.username) acc.username = `@${res.username}`
+          acc.status = 'active'
+          acc.lastChecked = new Date().toISOString()
+          appStore.saveAccount(acc)
+        }
+      }
     }
 
     return acc
@@ -118,37 +130,6 @@ export function registerIpcHandlers(): void {
       return { success: true, account: fullAccount }
     }
     return { success: false, error: res.error }
-  })
-
-  // --- Telegram Auth ---
-  let pendingAuthReq: TelegramAuthRequest | null = null
-
-  ipcMain.handle('telegram:request-code', async (_, req: TelegramAuthRequest) => {
-    pendingAuthReq = req
-    // Remember credentials in settings
-    appStore.updateSettings({
-      telegramApiId: req.apiId,
-      telegramApiHash: req.apiHash,
-      telegramPhone: req.phoneNumber
-    })
-    return telegramMirrorService.requestCode(req)
-  })
-
-  ipcMain.handle('telegram:prepare-auth', (_, req: TelegramAuthRequest) => {
-    pendingAuthReq = req
-    return true
-  })
-
-  ipcMain.handle('telegram:submit-code', async (_, submit: TelegramAuthCodeSubmit) => {
-    if (!pendingAuthReq) {
-      throw new Error('Telegram auth parameters expired. Please restart login.')
-    }
-    const acc = await telegramMirrorService.submitCode(pendingAuthReq, submit)
-    // Auto start mirror service on login
-    telegramMirrorService.start().catch((err) => {
-      console.warn('[Rosetta] Auto-start engine after login failed:', err)
-    })
-    return acc
   })
 
   // --- Rules ---
