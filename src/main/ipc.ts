@@ -223,43 +223,68 @@ export function registerIpcHandlers(): void {
       })
 
       if (target.platform === 'twitter') {
-        // Upload attached media files concurrently for ultra-fast response
-        const mediaIds: string[] = []
-        if (hasMedia) {
-          const uploadPromises = payload.mediaFiles!.map((file) =>
-            twitterDriver
-              .uploadMedia(account, file.dataBase64, file.type)
-              .then((res) => (res.success && res.mediaId ? res.mediaId : null))
-              .catch((err: any) => {
-                console.warn('[Composer] Failed to upload media:', err)
-                return null
-              })
-          )
-          const uploaded = await Promise.all(uploadPromises)
-          mediaIds.push(...uploaded.filter((id): id is string => Boolean(id)))
-        }
-
-        const res = await twitterDriver.publishPostWithMedia(
-          account,
-          payload.text,
-          mediaIds,
-          payload.options?.splitThreadIfLong !== false
-        )
-        results.push({ platform: 'twitter', ...res })
-
-        // Update log with result and measured latency
-        const durationMs = Date.now() - startTime
-        logItem.status = res.success ? 'success' : 'failed'
-        logItem.processedText = res.success ? payload.text : ''
-        logItem.errorMessage = res.error
-        logItem.targetUrl = res.url
-        logItem.durationMs = durationMs
-        appStore.addLog(logItem)
-        BrowserWindow.getAllWindows().forEach((win: any) => {
-          if (!win.isDestroyed() && win.webContents) {
-            win.webContents.send('mirror:log-added', logItem)
+        try {
+          // Upload attached media files (images & chunked videos) concurrently
+          const mediaItems: Array<{ mediaId: string; isVideo?: boolean }> = []
+          if (hasMedia) {
+            const uploadPromises = payload.mediaFiles!.map((file) =>
+              twitterDriver
+                .uploadMedia(account, file.dataBase64, file.type)
+                .then((res) =>
+                  res.success && res.mediaId
+                    ? { mediaId: res.mediaId, isVideo: res.isVideo ?? file.type.startsWith('video/') }
+                    : null
+                )
+                .catch((err: any) => {
+                  console.warn('[Composer] Failed to upload media:', err)
+                  return null
+                })
+            )
+            const uploaded = await Promise.all(uploadPromises)
+            mediaItems.push(
+              ...uploaded.filter((m): m is { mediaId: string; isVideo?: boolean } => Boolean(m))
+            )
           }
-        })
+
+          const res = await twitterDriver.publishPostWithMedia(
+            account,
+            payload.text,
+            mediaItems,
+            payload.options?.splitThreadIfLong !== false
+          )
+          results.push({ platform: 'twitter', ...res })
+
+          // Update log with result and measured latency
+          const durationMs = Date.now() - startTime
+          logItem.status = res.success ? 'success' : 'failed'
+          logItem.processedText = res.success ? payload.text : (payload.text || '发帖失败')
+          logItem.errorMessage = res.error
+          logItem.targetUrl = res.url
+          logItem.durationMs = durationMs
+          appStore.addLog(logItem)
+          BrowserWindow.getAllWindows().forEach((win: any) => {
+            if (!win.isDestroyed() && win.webContents) {
+              win.webContents.send('mirror:log-added', logItem)
+            }
+          })
+        } catch (postErr: any) {
+          console.error('[Composer] Post dispatch error:', postErr)
+          const durationMs = Date.now() - startTime
+          logItem.status = 'failed'
+          logItem.errorMessage = postErr?.message || String(postErr) || '发帖异常失败'
+          logItem.durationMs = durationMs
+          appStore.addLog(logItem)
+          BrowserWindow.getAllWindows().forEach((win: any) => {
+            if (!win.isDestroyed() && win.webContents) {
+              win.webContents.send('mirror:log-added', logItem)
+            }
+          })
+          results.push({
+            platform: 'twitter',
+            success: false,
+            error: postErr?.message || '发帖异常失败'
+          })
+        }
       }
     }
 

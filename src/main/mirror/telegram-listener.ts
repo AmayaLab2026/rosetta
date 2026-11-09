@@ -13,6 +13,7 @@ import { Account, MirrorLogItem, TelegramAuthCodeSubmit, TelegramAuthRequest } f
 export interface MediaItem {
   buffer: Buffer
   mimeType?: string
+  isVideo?: boolean
 }
 
 export class TelegramMirrorService {
@@ -270,24 +271,28 @@ export class TelegramMirrorService {
       }
     }
 
-    // Download media buffer if present
+    // Download media buffer if present (supports photos, videos, gifs, voice/audio)
     let downloadedMedia: MediaItem | null = null
     if (message.media && this.client) {
       try {
+        const isDocVideo =
+          Boolean(message.video) ||
+          message.media?.document?.mimeType?.startsWith('video/') ||
+          message.media?.document?.attributes?.some((a: any) => a.className === 'DocumentAttributeVideo') ||
+          (message.file?.name && /\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(message.file.name))
+
+        let mimeType = isDocVideo ? message.media?.document?.mimeType || 'video/mp4' : 'image/jpeg'
+        if (isDocVideo && !mimeType.startsWith('video/')) {
+          mimeType = 'video/mp4'
+        } else if (!isDocVideo && message.media?.document?.mimeType) {
+          mimeType = message.media.document.mimeType
+        }
+
         const buf = await this.client.downloadMedia(message, {})
         if (buf && Buffer.isBuffer(buf) && buf.length > 0) {
-          let mimeType = 'image/jpeg'
-          if (
-            message.video ||
-            message.media?.document?.mimeType?.startsWith('video/')
-          ) {
-            mimeType = message.media?.document?.mimeType || 'video/mp4'
-          } else if (message.media?.document?.mimeType) {
-            mimeType = message.media.document.mimeType
-          }
-          downloadedMedia = { buffer: buf, mimeType }
+          downloadedMedia = { buffer: buf, mimeType, isVideo: isDocVideo }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn('[Mirror] Failed to download media from Telegram:', err)
       }
     }
@@ -328,10 +333,10 @@ export class TelegramMirrorService {
         album.attributionSource = attributionSource
       }
 
-      // Wait 1200ms for sibling media messages to arrive before publishing
+      // Fast debounce (750ms) for sibling media messages to arrive before publishing
       album.timer = setTimeout(() => {
         this.flushAlbum(groupedId)
-      }, 1200)
+      }, 750)
 
       return
     }
@@ -493,81 +498,110 @@ export class TelegramMirrorService {
 
       // Dispatch to Twitter/X
       if (rule.targetAccount.platform === 'twitter') {
-        // Upload all media attachments to Twitter in parallel for maximum speed
-        const mediaIds: string[] = []
-        if (rule.filters.forwardMedia !== false && mediaBuffers.length > 0) {
-          console.log(`[Mirror] Uploading ${mediaBuffers.length} media attachments to X in parallel...`)
-          const uploadPromises = mediaBuffers.map((item) =>
-            twitterDriver
-              .uploadMedia(targetAccount, item.buffer, item.mimeType)
-              .then((res) => (res.success && res.mediaId ? res.mediaId : null))
-              .catch((err) => {
-                console.warn('[Mirror] Failed to upload media to Twitter:', err)
-                return null
-              })
+        try {
+          // Upload all media attachments (photos & chunked videos) to Twitter in parallel
+          const mediaItems: Array<{ mediaId: string; isVideo?: boolean }> = []
+          if (rule.filters.forwardMedia !== false && mediaBuffers.length > 0) {
+            console.log(`[Mirror] Uploading ${mediaBuffers.length} media attachments to X in parallel...`)
+            const uploadPromises = mediaBuffers.map((item) =>
+              twitterDriver
+                .uploadMedia(targetAccount, item.buffer, item.mimeType)
+                .then((res) =>
+                  res.success && res.mediaId
+                    ? { mediaId: res.mediaId, isVideo: item.isVideo }
+                    : null
+                )
+                .catch((err) => {
+                  console.warn('[Mirror] Failed to upload media to Twitter:', err)
+                  return null
+                })
+            )
+            const uploaded = await Promise.all(uploadPromises)
+            mediaItems.push(
+              ...uploaded.filter((m): m is { mediaId: string; isVideo?: boolean } => Boolean(m))
+            )
+          }
+
+          const tweetContent =
+            processedText ||
+            ContentPipeline.formatAttribution(
+              attributionSource,
+              rule.filters.attributionStyle || 'RT',
+              messageDate
+            )
+
+          // Publish media: videos isolated to dedicated tweets, images grouped, threaded if necessary
+          const publishRes = await twitterDriver.publishPostWithMedia(
+            targetAccount,
+            tweetContent,
+            mediaItems,
+            rule.filters.autoSplitThread !== false
           )
-          const uploaded = await Promise.all(uploadPromises)
-          mediaIds.push(...uploaded.filter((id): id is string => Boolean(id)))
-        }
 
-        const tweetContent =
-          processedText ||
-          ContentPipeline.formatAttribution(
-            attributionSource,
-            rule.filters.attributionStyle || 'RT',
-            messageDate
-          )
+          // Update rule stats
+          rule.stats.totalReceived += 1
+          if (publishRes.success) {
+            rule.stats.totalForwarded += 1
+            rule.stats.lastMirroredAt = new Date().toISOString()
 
-        // Publish full batch of images (up to 6 per tweet, dynamically chained into thread if >6 or API restricted)
-        const publishRes = await twitterDriver.publishPostWithMedia(
-          targetAccount,
-          tweetContent,
-          mediaIds,
-          rule.filters.autoSplitThread !== false
-        )
-
-        // Update rule stats
-        rule.stats.totalReceived += 1
-        if (publishRes.success) {
-          rule.stats.totalForwarded += 1
-          rule.stats.lastMirroredAt = new Date().toISOString()
-
-          // Track mapping for all message IDs in the album for automatic synchronized deletion
-          const targetTweetIds = publishRes.tweetIds || (publishRes.tweetId ? [publishRes.tweetId] : [])
-          if (targetTweetIds.length > 0) {
-            for (const msgId of messageIds) {
-              appStore.saveMirroredPost({
-                id: `mp_${Date.now()}_${msgId}_${Math.random().toString(36).substring(2, 6)}`,
-                ruleId: rule.id,
-                telegramChannelId: chatId,
-                telegramChannelUsername: chatUsername,
-                telegramMessageId: msgId,
-                targetPlatform: 'twitter',
-                targetAccountId: targetAccount.id,
-                targetTweetIds,
-                createdAt: new Date().toISOString()
-              })
+            // Track mapping for all message IDs in the album for automatic synchronized deletion
+            const targetTweetIds =
+              publishRes.tweetIds || (publishRes.tweetId ? [publishRes.tweetId] : [])
+            if (targetTweetIds.length > 0) {
+              for (const msgId of messageIds) {
+                appStore.saveMirroredPost({
+                  id: `mp_${Date.now()}_${msgId}_${Math.random().toString(36).substring(2, 6)}`,
+                  ruleId: rule.id,
+                  telegramChannelId: chatId,
+                  telegramChannelUsername: chatUsername,
+                  telegramMessageId: msgId,
+                  targetPlatform: 'twitter',
+                  targetAccountId: targetAccount.id,
+                  targetTweetIds,
+                  createdAt: new Date().toISOString()
+                })
+              }
             }
           }
-        }
-        appStore.saveRule(rule)
+          appStore.saveRule(rule)
 
-        // Record log with duration
-        const durationMs = Date.now() - startTime
-        this.emitLog({
-          id: logId,
-          timestamp: new Date().toISOString(),
-          ruleId: rule.id,
-          sourceChannel: chatTitle,
-          targetPlatform: 'twitter',
-          originalText: rawText || (mediaBuffers.length > 0 ? `[全套图片 - 共 ${mediaBuffers.length} 张]` : '(Media Message)'),
-          processedText: tweetContent,
-          mediaCount: mediaIds.length,
-          status: publishRes.success ? 'success' : 'failed',
-          errorMessage: publishRes.error,
-          targetUrl: publishRes.url,
-          durationMs
-        })
+          // Record log with duration (always emit, even if publishRes.success === false)
+          const durationMs = Date.now() - startTime
+          this.emitLog({
+            id: logId,
+            timestamp: new Date().toISOString(),
+            ruleId: rule.id,
+            sourceChannel: chatTitle,
+            targetPlatform: 'twitter',
+            originalText:
+              rawText ||
+              (mediaBuffers.length > 0 ? `[全套媒体 - 共 ${mediaBuffers.length} 项]` : '(Media Message)'),
+            processedText: publishRes.success ? tweetContent : (processedText || '转发推文失败'),
+            mediaCount: mediaItems.length,
+            status: publishRes.success ? 'success' : 'failed',
+            errorMessage: publishRes.error,
+            targetUrl: publishRes.url,
+            durationMs
+          })
+        } catch (dispatchErr: any) {
+          console.error(`[Mirror] Rule "${rule.name}" encountered fatal error:`, dispatchErr)
+          const durationMs = Date.now() - startTime
+          this.emitLog({
+            id: logId,
+            timestamp: new Date().toISOString(),
+            ruleId: rule.id,
+            sourceChannel: chatTitle,
+            targetPlatform: 'twitter',
+            originalText:
+              rawText ||
+              (mediaBuffers.length > 0 ? `[全套媒体 - 共 ${mediaBuffers.length} 项]` : '(Media Message)'),
+            processedText: '转发流程发生异常',
+            mediaCount: mediaBuffers.length,
+            status: 'failed',
+            errorMessage: dispatchErr?.message || String(dispatchErr) || '未知转发异常',
+            durationMs
+          })
+        }
       }
     }
   }

@@ -289,7 +289,7 @@ export class TwitterDriver {
         form.append('command', 'APPEND')
         form.append('media_id', mediaId)
         form.append('segment_index', String(segmentIndex))
-        form.append('media', new Blob([chunk]))
+        form.append('media', new Blob([chunk]), 'blob')
 
         const appendRes = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
           method: 'POST',
@@ -323,35 +323,49 @@ export class TwitterDriver {
 
       const finData = (await finRes.json()) as any
 
-      // 4. Poll STATUS if asynchronous processing is in progress
+      // 4. Poll STATUS if asynchronous processing is in progress (required for videos)
       if (finData.processing_info) {
         let state = finData.processing_info.state
         let checkAfter = (finData.processing_info.check_after_secs || 1) * 1000
+        let retries = 0
 
-        while (state === 'pending' || state === 'in_progress') {
-          await new Promise((r) => setTimeout(r, checkAfter))
+        while ((state === 'pending' || state === 'in_progress') && retries < 45) {
+          await new Promise((r) => setTimeout(r, Math.max(1000, checkAfter)))
+          retries++
 
-          const statusRes = await fetch(
-            `https://upload.twitter.com/1.1/media/upload.json?command=STATUS&media_id=${mediaId}`,
-            { headers }
-          )
+          try {
+            const statusRes = await fetch(
+              `https://upload.twitter.com/1.1/media/upload.json?command=STATUS&media_id=${mediaId}`,
+              { headers }
+            )
 
-          if (!statusRes.ok) break
-          const statusData = (await statusRes.json()) as any
-          state = statusData.processing_info?.state
-          checkAfter = (statusData.processing_info?.check_after_secs || 2) * 1000
-
-          if (state === 'failed') {
-            return {
-              success: false,
-              error: statusData.processing_info?.error?.message || 'Video processing failed on X'
+            if (!statusRes.ok) {
+              const errTxt = await statusRes.text()
+              console.warn(`[TwitterDriver] Video STATUS check HTTP ${statusRes.status}: ${errTxt.slice(0, 80)}`)
+              continue
             }
+            const statusData = (await statusRes.json()) as any
+            state = statusData.processing_info?.state
+            checkAfter = (statusData.processing_info?.check_after_secs || 2) * 1000
+
+            if (state === 'failed') {
+              return {
+                success: false,
+                error: statusData.processing_info?.error?.message || 'Video processing failed on X'
+              }
+            }
+            if (state === 'succeeded') {
+              break
+            }
+          } catch (e: any) {
+            console.warn('[TwitterDriver] Video STATUS poll error:', e)
           }
         }
       }
 
-      console.log(`[TwitterDriver] Chunked media upload successful! mediaId: ${mediaId}`)
-      return { success: true, mediaId }
+      const isVideo = mediaCategory === 'tweet_video'
+      console.log(`[TwitterDriver] Chunked media upload successful! mediaId: ${mediaId}, isVideo: ${isVideo}`)
+      return { success: true, mediaId, isVideo }
     } catch (err: any) {
       return { success: false, error: err.message || 'Chunked media upload failed' }
     }
@@ -364,7 +378,7 @@ export class TwitterDriver {
     account: Account,
     mediaData: Buffer | Uint8Array | string,
     mimeType?: string
-  ): Promise<{ success: boolean; mediaId?: string; error?: string }> {
+  ): Promise<{ success: boolean; mediaId?: string; isVideo?: boolean; error?: string }> {
     const isVideo =
       mimeType?.startsWith('video/') ||
       (typeof mediaData === 'string' &&
@@ -421,8 +435,8 @@ export class TwitterDriver {
         return { success: false, error: 'Failed to retrieve media_id from Twitter' }
       }
 
-      console.log(`[TwitterDriver] Uploaded media successfully, mediaId: ${mediaId}`)
-      return { success: true, mediaId }
+      console.log(`[TwitterDriver] Uploaded image successfully, mediaId: ${mediaId}`)
+      return { success: true, mediaId, isVideo: false }
     } catch (err: any) {
       return { success: false, error: err.message || 'Media upload failed' }
     }
@@ -722,17 +736,21 @@ export class TwitterDriver {
 
   /**
    * Publish a tweet or thread with all media bundled together.
-   * - Bundles up to 6 images per tweet (per user requirements).
-   * - If the account or endpoint rejects >4 images, dynamically falls back to 4 per tweet.
-   * - Excess images (or long text) are chained as a thread sequence.
+   * - Full video support: isolates videos into dedicated single-media tweets to conform with Twitter API specs.
+   * - Bundles up to 6 images per tweet (or 4 if restricted).
+   * - Excess media or long captions are automatically chained into a Thread.
    */
   async publishPostWithMedia(
     account: Account,
     text: string,
-    mediaIds: string[] = [],
+    mediaItems: Array<string | { mediaId: string; isVideo?: boolean }> = [],
     autoSplitThread = true
   ): Promise<TwitterPublishResult> {
-    if (!mediaIds || mediaIds.length === 0) {
+    const normalizedMedia = (mediaItems || [])
+      .map((m) => (typeof m === 'string' ? { mediaId: m, isVideo: false } : m))
+      .filter((m) => Boolean(m.mediaId))
+
+    if (normalizedMedia.length === 0) {
       const chunks = autoSplitThread ? ContentPipeline.splitIntoThreadChunks(text) : [text]
       if (chunks.length > 1) {
         return this.postThread(account, chunks)
@@ -740,13 +758,35 @@ export class TwitterDriver {
       return this.postTweet(account, chunks[0] || '')
     }
 
+    // Helper to generate batches: videos individually, images in batches of batchSize
+    const buildBatches = (batchSize: number): string[][] => {
+      const batches: string[][] = []
+      let currentImageBatch: string[] = []
+
+      for (const item of normalizedMedia) {
+        if (item.isVideo) {
+          if (currentImageBatch.length > 0) {
+            batches.push(currentImageBatch)
+            currentImageBatch = []
+          }
+          batches.push([item.mediaId])
+        } else {
+          currentImageBatch.push(item.mediaId)
+          if (currentImageBatch.length >= batchSize) {
+            batches.push(currentImageBatch)
+            currentImageBatch = []
+          }
+        }
+      }
+      if (currentImageBatch.length > 0) {
+        batches.push(currentImageBatch)
+      }
+      return batches
+    }
+
     // Helper to post thread with given batch size
     const executeThread = async (batchSize: number): Promise<TwitterPublishResult> => {
-      const mediaBatches: string[][] = []
-      for (let i = 0; i < mediaIds.length; i += batchSize) {
-        mediaBatches.push(mediaIds.slice(i, i + batchSize))
-      }
-
+      const mediaBatches = buildBatches(batchSize)
       const textChunks = autoSplitThread
         ? ContentPipeline.splitIntoThreadChunks(text)
         : [text]
