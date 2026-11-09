@@ -3,6 +3,7 @@ import { appStore } from './storage/store'
 import { terminalLogger } from './storage/terminal-logger'
 import { twitterDriver } from './drivers/twitter'
 import { telegramBotDriver } from './drivers/telegram-bot'
+import { telegramBotInteractiveService } from './drivers/telegram-bot-interactive'
 import { telegramMirrorService } from './mirror/telegram-listener'
 import { ContentPipeline } from './mirror/pipeline'
 import {
@@ -372,6 +373,9 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('settings:save', (_, settings) => {
     appStore.updateSettings(settings)
+    if (settings.defaultBotToken !== undefined || settings.defaultBotChatId !== undefined) {
+      telegramBotInteractiveService.restart().catch(() => {})
+    }
     return true
   })
 
@@ -496,5 +500,16 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('telegram:bot-verify-token', (_, token: string) => {
     return telegramBotDriver.verifyBotToken(token)
+  })
+
+  // --- Telegram Bot Interactive Polling ---
+  ipcMain.handle('telegram:bot-interactive-status', () => {
+    return telegramBotInteractiveService.getStatus()
+  })
+
+  ipcMain.handle('telegram:bot-interactive-toggle', async (_, start: boolean) => {
+    if (start) return telegramBotInteractiveService.start()
+    telegramBotInteractiveService.stop()
+    return true
   })
 }

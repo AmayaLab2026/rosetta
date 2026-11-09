@@ -7,6 +7,7 @@ import { telegramMirrorService } from './mirror/telegram-listener'
 import { appStore } from './storage/store'
 import { terminalLogger } from './storage/terminal-logger'
 import { prewarmTwitterTransaction } from './drivers/twitter-transaction'
+import { telegramBotInteractiveService } from './drivers/telegram-bot-interactive'
 export { twitterDriver } from './drivers/twitter'
 
 // Initialize real-time terminal logger to intercept all system console logs
@@ -207,6 +208,15 @@ app.whenReady().then(async () => {
     console.warn('[Rosetta] Error refreshing accounts:', e)
   }
 
+  // Auto-start interactive Telegram Bot polling for user-to-bot chat posting
+  try {
+    telegramBotInteractiveService.start().catch((err) => {
+      console.warn('[Rosetta] Failed to start interactive bot service on launch:', err)
+    })
+  } catch (e) {
+    console.warn('[Rosetta] Error starting interactive bot:', e)
+  }
+
   // Pre-warm Twitter client transaction ID in background for zero-latency post signing
   prewarmTwitterTransaction().catch(() => {})
   setInterval(() => {
@@ -221,6 +231,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  telegramBotInteractiveService.stop()
   appStore.flushSync()
 })
 

@@ -20,7 +20,8 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
-  EyeOff
+  EyeOff,
+  MessageSquare
 } from 'lucide-react'
 import { useI18n } from '../i18n'
 
@@ -41,6 +42,13 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
   const [botProfile, setBotProfile] = useState<{ botName?: string; username?: string } | null>(null)
   const [verifyError, setVerifyError] = useState<string | null>(null)
   const [savedToast, setSavedToast] = useState(false)
+
+  // Interactive Bot Polling Status
+  const [interactiveStatus, setInteractiveStatus] = useState<{
+    polling: boolean
+    botUsername: string | null
+    botFirstName: string | null
+  }>({ polling: false, botUsername: null, botFirstName: null })
 
   // Posts history & management
   const [posts, setPosts] = useState<TelegramBotPostItem[]>([])
@@ -77,6 +85,15 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
     }).catch(() => {})
 
     loadPosts()
+
+    const fetchInteractiveStatus = () => {
+      window.rosetta.getTelegramBotInteractiveStatus?.().then((res) => {
+        if (res) setInteractiveStatus(res)
+      }).catch(() => {})
+    }
+    fetchInteractiveStatus()
+    const timer = setInterval(fetchInteractiveStatus, 3000)
+    return () => clearInterval(timer)
   }, [])
 
   const loadPosts = async () => {
@@ -96,6 +113,9 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
       })
       setSavedToast(true)
       setTimeout(() => setSavedToast(false), 2000)
+      window.rosetta.getTelegramBotInteractiveStatus?.().then((res) => {
+        if (res) setInteractiveStatus(res)
+      }).catch(() => {})
     } catch (e) {
       console.warn('[TelegramBotStudio] Save error:', e)
     }
@@ -111,7 +131,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
       const res = await window.rosetta.verifyTelegramBotToken?.(botToken.trim())
       if (res?.valid) {
         setBotProfile({ botName: res.botName, username: res.username })
-        handleSaveCredentials(botToken, chatId)
+        await handleSaveCredentials(botToken, chatId)
       } else {
         setVerifyError(res?.error || (isZh ? 'Token 无效，请核对来自 @BotFather 的凭据' : 'Invalid Bot Token'))
       }
@@ -203,16 +223,16 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
           <div className="flex items-center gap-2.5">
             <h2 className="text-base font-semibold text-foreground font-mono tracking-tight flex items-center gap-2">
               <Bot className="w-4 h-4 text-brand" />
-              <span>{isZh ? 'Telegram 机器人与删帖控制台' : 'Telegram Bot Console'}</span>
+              <span>{isZh ? 'Telegram 机器人中枢 (交互发帖 & 删帖)' : 'Telegram Bot Studio'}</span>
             </h2>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
-              官方 Bot API 服务端
+              官方 Bot API 交互会话
             </span>
           </div>
           <p className="text-xs text-gray-500 font-mono mt-0.5">
             {isZh
-              ? '维护电报 Bot 服务端 Token 凭证与目标频道配置，提供频道消息远程管理与实时删帖撤回'
-              : 'Manage official Bot API credentials, channel configuration, and remote message revocation'}
+              ? '用户可在 Telegram 私聊中直接与机器人沟通发帖至推特和频道，并提供远程管理与删帖撤回'
+              : 'Interact with bot in private chat to post to Twitter/channel, manage revocation and credentials'}
           </p>
         </div>
 
@@ -223,7 +243,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand hover:bg-brand-hover text-white font-medium shadow-glow-terracotta transition-all active:scale-95"
             >
               <Send className="w-3.5 h-3.5" />
-              <span>{isZh ? '前往统一发帖器发布' : 'Go to Composer'}</span>
+              <span>{isZh ? '前往统一发帖器' : 'Composer'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           )}
@@ -239,6 +259,66 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
             <Hash className="w-3.5 h-3.5" />
             <span>{showManualDelete ? (isZh ? '收起指定删帖' : 'Close Tool') : (isZh ? '指定ID删帖' : 'ID Revoke Tool')}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Interactive Telegram Bot Controller Card */}
+      <div className="rounded-xl bg-surface border border-surface-border p-5 shadow-panel space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-telegram-subtle border border-telegram-border/60 flex items-center justify-center text-telegram font-bold text-lg shadow-2xs">
+              🤖
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm text-foreground">
+                  {interactiveStatus.botUsername ? `@${interactiveStatus.botUsername}` : (isZh ? '电报交互发帖机器人' : 'Telegram Interactive Bot')}
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold flex items-center gap-1.5 ${
+                  interactiveStatus.polling
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                    : 'bg-surface-muted text-gray-500 border border-surface-border'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${interactiveStatus.polling ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
+                  <span>{interactiveStatus.polling ? (isZh ? '私聊会话就绪·正在监听' : 'Chat Polling Active') : (isZh ? '未启动' : 'Idle')}</span>
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 font-mono mt-0.5">
+                {isZh
+                  ? '在手机或桌面 Telegram 私聊中发送 /start，即可直接交互发帖至推特与电报频道'
+                  : 'Send /start in private chat with this bot to publish interactively'}
+              </p>
+            </div>
+          </div>
+
+          {interactiveStatus.botUsername && (
+            <a
+              href={`https://t.me/${interactiveStatus.botUsername}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-telegram hover:bg-telegram/90 text-white font-mono text-xs font-semibold shadow-2xs transition-all active:scale-95 self-start sm:self-auto"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>{isZh ? '打开 Telegram 私聊发帖' : 'Open Chat in Telegram'}</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
+        </div>
+
+        {/* Workflow Steps Preview */}
+        <div className="pt-2 border-t border-surface-border/60 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] font-mono text-gray-600">
+          <div className="p-2.5 rounded-lg bg-surface-muted/40 border border-surface-border/60 space-y-0.5">
+            <span className="font-bold text-telegram block">1. 发送 /start</span>
+            <span className="text-gray-500 text-[10px]">在 Telegram 私聊唤起机器人，点击选项卡选择发布目标 (Twitter / 频道 / 两端)</span>
+          </div>
+          <div className="p-2.5 rounded-lg bg-surface-muted/40 border border-surface-border/60 space-y-0.5">
+            <span className="font-bold text-telegram block">2. 发送文字或媒体</span>
+            <span className="text-gray-500 text-[10px]">直接发送文本或上传图片、视频（自动相册打包），机器人暂存并展示预览</span>
+          </div>
+          <div className="p-2.5 rounded-lg bg-surface-muted/40 border border-surface-border/60 space-y-0.5">
+            <span className="font-bold text-telegram block">3. 确认并返回链接</span>
+            <span className="text-gray-500 text-[10px]">点击【确认发布】，机器人即刻执行分发并回复直达推文与频道链接</span>
+          </div>
         </div>
       </div>
 
@@ -295,7 +375,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
               <div className="p-3 rounded-lg bg-surface-muted/50 border border-surface-border/70 space-y-1">
                 <div className="font-mono text-[11px] font-bold text-brand">步骤 4 · 填入凭证</div>
                 <p className="text-[11px] text-gray-600">
-                  在下方填入 Bot Token 与频道用户名（如 <code className="bg-white px-1 py-0.2 rounded border text-[10px]">@my_channel</code>），即可自动记忆并在全系统通用！
+                  在下方填入 Bot Token 与频道用户名（如 <code className="bg-white px-1 py-0.2 rounded border text-[10px]">@my_channel</code>），即可自动记忆并开启私聊会话！
                 </p>
               </div>
             </div>
@@ -391,7 +471,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
           <div className="text-[11px] font-mono text-gray-500">
             {verifyError && <span className="text-rose-600 font-semibold">验证失败: {verifyError}</span>}
             {!verifyError && (
-              <span>凭证失焦自动存盘；统一发帖器 (Composer) 发送电报时将直接使用该配置。</span>
+              <span>凭证失焦自动存盘；机器人自动连接 Telegram Long Polling，接收私聊指令。</span>
             )}
           </div>
 
@@ -516,7 +596,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = ({ accounts, 
             <Bot className="w-8 h-8 opacity-40 text-brand" />
             <p className="text-xs">
               {isZh
-                ? '暂无机器人发帖历史记录。使用「统一发帖器」发送至电报后，消息将汇集于此处供随时撤回。'
+                ? '暂无已发消息记录。在 Telegram 私聊发帖或在「统一发帖器」发布后，消息将汇集于此处供随时撤回。'
                 : 'No messages posted yet. Sent messages will be recorded here for one-click revocation.'}
             </p>
           </div>

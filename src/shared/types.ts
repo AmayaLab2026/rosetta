@@ -194,6 +194,8 @@ export interface RosettaAPI {
   getTelegramBotPosts: () => Promise<TelegramBotPostItem[]>
   clearTelegramBotPosts: () => Promise<boolean>
   verifyTelegramBotToken: (token: string) => Promise<{ valid: boolean; botName?: string; username?: string; error?: string }>
+  getTelegramBotInteractiveStatus: () => Promise<{ polling: boolean; botUsername: string | null; botFirstName: string | null }>
+  toggleTelegramBotInteractive: (start: boolean) => Promise<boolean>
 
   // Settings & System
   getSettings: () => Promise<AppSettings>
