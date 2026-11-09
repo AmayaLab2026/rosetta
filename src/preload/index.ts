@@ -39,6 +39,12 @@ const api: RosettaAPI = {
   getTerminalLogs: () => ipcRenderer.invoke('terminal:get'),
   clearTerminalLogs: () => ipcRenderer.invoke('terminal:clear'),
 
+  // Telegram Bot Operations
+  sendTelegramBotPost: (payload) => ipcRenderer.invoke('telegram:bot-send', payload),
+  deleteTelegramBotPost: (params) => ipcRenderer.invoke('telegram:bot-delete', params),
+  getTelegramBotPosts: () => ipcRenderer.invoke('telegram:bot-get-posts'),
+  clearTelegramBotPosts: () => ipcRenderer.invoke('telegram:bot-clear-posts'),
+
   // Settings & System
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),

@@ -49,6 +49,10 @@ export class TelegramMirrorService {
     }
   }
 
+  public getClient(): TelegramClient | null {
+    return this.client
+  }
+
   /**
    * Request Telegram login code via SMS or Telegram App
    */

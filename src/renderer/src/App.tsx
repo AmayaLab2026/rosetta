@@ -3,6 +3,7 @@ import { Header } from './components/Header'
 import { Sidebar, TabType } from './components/Sidebar'
 import { MirrorStudio } from './components/MirrorStudio'
 import { Composer } from './components/Composer'
+import { TelegramBotStudio } from './components/TelegramBotStudio'
 import { RulesManager } from './components/RulesManager'
 import { AccountsManager } from './components/AccountsManager'
 import { LogsView } from './components/LogsView'
@@ -171,6 +172,10 @@ function RosettaMain() {
 
           {currentTab === 'composer' && (
             <Composer accounts={accounts} onOpenLogs={() => setCurrentTab('logs')} />
+          )}
+
+          {currentTab === 'bot' && (
+            <TelegramBotStudio accounts={accounts} />
           )}
 
           {currentTab === 'rules' && (

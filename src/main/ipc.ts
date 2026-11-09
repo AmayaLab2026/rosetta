@@ -2,6 +2,7 @@ import { ipcMain, app, shell } from 'electron'
 import { appStore } from './storage/store'
 import { terminalLogger } from './storage/terminal-logger'
 import { twitterDriver } from './drivers/twitter'
+import { telegramBotDriver } from './drivers/telegram-bot'
 import { telegramMirrorService } from './mirror/telegram-listener'
 import { ContentPipeline } from './mirror/pipeline'
 import {
@@ -408,6 +409,24 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('terminal:clear', () => {
     terminalLogger.clearLogs()
+    return true
+  })
+
+  // --- Telegram Bot Operations ---
+  ipcMain.handle('telegram:bot-send', (_, payload) => {
+    return telegramBotDriver.sendPost(payload)
+  })
+
+  ipcMain.handle('telegram:bot-delete', (_, params) => {
+    return telegramBotDriver.deletePost(params)
+  })
+
+  ipcMain.handle('telegram:bot-get-posts', () => {
+    return appStore.getBotPosts()
+  })
+
+  ipcMain.handle('telegram:bot-clear-posts', () => {
+    appStore.clearBotPosts()
     return true
   })
 }

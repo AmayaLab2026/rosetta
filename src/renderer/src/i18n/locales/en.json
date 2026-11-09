@@ -10,6 +10,7 @@
     "workstation": "Workstation",
     "studio": "Mirror Studio",
     "composer": "Post Composer",
+    "bot": "Telegram Bot",
     "rules": "Mirror Rules",
     "accounts": "Accounts & Auth",
     "logs": "Activity Logs",

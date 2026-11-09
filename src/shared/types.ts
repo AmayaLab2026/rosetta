@@ -82,6 +82,27 @@ export interface TerminalLogItem {
   message: string
 }
 
+export interface TelegramBotPostItem {
+  id: string
+  messageId: number
+  chatId: string
+  chatTitle?: string
+  text: string
+  mediaType?: 'none' | 'photo' | 'video' | 'album'
+  mediaCount: number
+  sentAt: string
+  status: 'sent' | 'deleted'
+  postUrl?: string
+}
+
+export interface TelegramBotSendPayload {
+  chatId: string
+  text: string
+  botToken?: string
+  useMtproto?: boolean
+  mediaFiles?: Array<{ dataBase64: string; name: string; type: string }>
+}
+
 export interface MirroredPostRecord {
   id: string
   ruleId: string
@@ -128,6 +149,8 @@ export interface AppSettings {
   openAtLogin?: boolean
   minimizeToTray?: boolean
   startMinimized?: boolean
+  defaultBotToken?: string
+  defaultBotChatId?: string
 }
 
 export interface RosettaAPI {
@@ -164,6 +187,12 @@ export interface RosettaAPI {
   // Terminal Console Logs
   getTerminalLogs: () => Promise<TerminalLogItem[]>
   clearTerminalLogs: () => Promise<boolean>
+
+  // Telegram Bot Operations
+  sendTelegramBotPost: (payload: TelegramBotSendPayload) => Promise<{ success: boolean; messageId?: number; postUrl?: string; error?: string }>
+  deleteTelegramBotPost: (params: { chatId: string; messageId: number; botToken?: string; useMtproto?: boolean }) => Promise<{ success: boolean; error?: string }>
+  getTelegramBotPosts: () => Promise<TelegramBotPostItem[]>
+  clearTelegramBotPosts: () => Promise<boolean>
 
   // Settings & System
   getSettings: () => Promise<AppSettings>

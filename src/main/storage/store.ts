@@ -1,13 +1,14 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
-import { Account, MirrorRule, MirrorLogItem, MirroredPostRecord, AppSettings } from '../../shared/types'
+import { Account, MirrorRule, MirrorLogItem, MirroredPostRecord, AppSettings, TelegramBotPostItem } from '../../shared/types'
 
 interface StoreData {
   accounts: Account[]
   rules: MirrorRule[]
   logs: MirrorLogItem[]
   mirroredPosts: MirroredPostRecord[]
+  botPosts?: TelegramBotPostItem[]
   settings: AppSettings
 }
 
@@ -16,6 +17,7 @@ const DEFAULT_STORE: StoreData = {
   rules: [],
   logs: [],
   mirroredPosts: [],
+  botPosts: [],
   settings: {
     autoStartEngineOnLaunch: true,
     minimizeToTray: true,
@@ -219,6 +221,44 @@ export class AppStore {
     if (!this.data.mirroredPosts) return
     this.data.mirroredPosts = this.data.mirroredPosts.filter((m) => m.id !== id)
     this.persist()
+  }
+
+  // --- Telegram Bot Posts ---
+  public getBotPosts(): TelegramBotPostItem[] {
+    return (this.data.botPosts || []).slice(-200).reverse()
+  }
+
+  public saveBotPost(post: TelegramBotPostItem): void {
+    if (!this.data.botPosts) this.data.botPosts = []
+    const idx = this.data.botPosts.findIndex((p) => p.id === post.id)
+    if (idx >= 0) {
+      this.data.botPosts[idx] = post
+    } else {
+      this.data.botPosts.push(post)
+    }
+    if (this.data.botPosts.length > 500) {
+      this.data.botPosts = this.data.botPosts.slice(-500)
+    }
+    this.persist()
+  }
+
+  public updateBotPostStatus(chatId: string, messageId: number, status: 'sent' | 'deleted'): void {
+    if (!this.data.botPosts) return
+    const normChat = chatId.replace(/^-100/, '').replace(/^@/, '').toLowerCase()
+    let changed = false
+    this.data.botPosts.forEach((p) => {
+      const pChat = p.chatId.replace(/^-100/, '').replace(/^@/, '').toLowerCase()
+      if ((pChat === normChat || !chatId) && p.messageId === messageId) {
+        p.status = status
+        changed = true
+      }
+    })
+    if (changed) this.persist(true)
+  }
+
+  public clearBotPosts(): void {
+    this.data.botPosts = []
+    this.persist(true)
   }
 
   // --- Settings ---
