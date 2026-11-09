@@ -517,7 +517,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('telegram:bot-get-pairing-info', () => {
     return {
       pairingCode: appStore.getBotPairingCode(),
-      authorizedUserIds: appStore.getBotAuthorizedUserIds()
+      authorizedUserIds: appStore.getBotAuthorizedUserIds(),
+      blockedUserIds: appStore.getBotBlockedUserIds()
     }
   })
 
@@ -527,6 +528,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('telegram:bot-revoke-user', (_, userId: number) => {
     return appStore.revokeBotAuthorizedUserId(userId)
+  })
+
+  ipcMain.handle('telegram:bot-unblock-user', (_, userId: number) => {
+    return appStore.unblockBotUser(userId)
   })
 
   // --- App Version Info (Dynamic) ---

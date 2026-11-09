@@ -50,6 +50,7 @@ const api: RosettaAPI = {
   getBotPairingInfo: () => ipcRenderer.invoke('telegram:bot-get-pairing-info'),
   resetBotPairingCode: () => ipcRenderer.invoke('telegram:bot-reset-pairing-code'),
   revokeBotAuthorizedUser: (userId) => ipcRenderer.invoke('telegram:bot-revoke-user', userId),
+  unblockBotUser: (userId) => ipcRenderer.invoke('telegram:bot-unblock-user', userId),
 
   // Dedicated Channel / Twitter Post Deletion Studio
   getTelegramRecentPosts: (params) => ipcRenderer.invoke('telegram:get-channel-recent', params),

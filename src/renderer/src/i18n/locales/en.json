@@ -143,7 +143,11 @@
     "authorizedUsersTitle": "Authorized Telegram User IDs",
     "noAuthorizedUsers": "No authorized users yet. Send the 6-digit code in private chat to link.",
     "revokeUser": "Revoke",
-    "userRevoked": "User revoked"
+    "userRevoked": "User revoked",
+    "blockedUsersTitle": "Auto-Blocked Blacklist (5 Failed Attempts)",
+    "noBlockedUsers": "No blocked users (All safe)",
+    "unblockUser": "Unblock",
+    "strikePolicyNotice": "Security Policy: 5 consecutive wrong pairing code attempts will trigger automatic permanent block."
   },
   "terminal": {
     "title": "Terminal Console Logs",

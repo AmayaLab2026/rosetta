@@ -12,6 +12,8 @@ interface UserSession {
     text: string
     mediaFiles: Array<{ buffer: Buffer; mimeType: string; isVideo?: boolean; name?: string }>
   }
+  recentTgCache?: Array<{ id: number; text: string; date: string }>
+  recentTwCache?: Array<{ id: string; text: string; createdAt: string }>
 }
 
 export class TelegramBotInteractiveService {
@@ -48,6 +50,25 @@ export class TelegramBotInteractiveService {
         this.botUsername = data.result.username || null
         this.botFirstName = data.result.first_name || null
         console.log(`[TelegramBotInteractive] Bot authorized: @${this.botUsername} (${this.botFirstName})`)
+
+        // Activate official Telegram Bot commands menu for instant user selection
+        try {
+          await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              commands: [
+                { command: 'start', description: '🚀 开启发帖菜单 / 发送图文视频' },
+                { command: 'delete', description: '🗑️ 撤回/删除已发布贴文 (1~5选项卡)' },
+                { command: 'help', description: '📖 使用指南与指令帮助' },
+                { command: 'cancel', description: '❌ 取消当前操作 / 重置会话' }
+              ]
+            })
+          })
+          console.log('[TelegramBotInteractive] Official Telegram Bot commands menu activated successfully!')
+        } catch (cmdErr: any) {
+          console.warn('[TelegramBotInteractive] Failed to register setMyCommands:', cmdErr.message)
+        }
       } else {
         console.warn('[TelegramBotInteractive] Bot authorization failed:', data.description)
         return false
@@ -199,7 +220,7 @@ export class TelegramBotInteractiveService {
 
       // Delete Menu
       if (data === 'menu_delete') {
-        await this.sendMessage(baseUrl, fromId, '🗑️ <b>请选择需要查看并撤回的历史平台：</b>\n（每次获取最近 5 条已发布贴文）', {
+        await this.sendMessage(baseUrl, fromId, '🗑️ <b>请选择需要查看并撤回的历史平台：</b>\n（一次性获取最近 5 条已发布贴文并提供 1~5 选项卡选择）', {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
@@ -216,40 +237,53 @@ export class TelegramBotInteractiveService {
         return
       }
 
-      // Get Telegram 5 recent posts and allow deletion
+      // Get Telegram 5 recent posts in a single consolidated preview with 1~5 selection tabs
       if (data === 'del_hist_tg') {
         const settings = appStore.getSettings()
         const targetChat = settings.defaultBotChatId || ''
         const posts = await telegramMirrorService.getChannelRecentMessages(targetChat, 5)
 
         if (posts.length === 0) {
-          await this.sendMessage(baseUrl, fromId, `⚠️ 暂未查询到频道 <code>${targetChat || '默认频道'}</code> 的历史消息。`, { parse_mode: 'HTML' })
+          await this.sendMessage(baseUrl, fromId, `⚠️ 暂未查询到电报频道 <code>${targetChat || '默认频道'}</code> 的历史消息。`, { parse_mode: 'HTML' })
           return
         }
 
-        await this.sendMessage(baseUrl, fromId, `📋 <b>电报频道 ${targetChat} 最近 5 条贴文：</b>\n点击下方按钮可直接远程撤回：`, { parse_mode: 'HTML' })
-        for (const p of posts) {
-          const preview = p.text.length > 60 ? `${p.text.slice(0, 60)}...` : p.text || (p.hasMedia ? '[多媒体内容]' : '')
-          await this.sendMessage(
-            baseUrl,
-            fromId,
-            `📌 <b>消息 #${p.id}</b> (${new Date(p.date).toLocaleTimeString()})\n<blockquote>${this.escapeHtml(preview)}</blockquote>`,
-            {
-              parse_mode: 'HTML',
-              reply_markup: {
-                inline_keyboard: [
-                  [
-                    { text: `🗑️ 撤回删除此消息 (#${p.id})`, callback_data: `do_del_tg_${p.id}` }
-                  ]
-                ]
-              }
-            }
-          )
+        session.recentTgCache = posts.map((p) => ({
+          id: p.id,
+          text: p.text || (p.hasMedia ? '[多媒体内容]' : ''),
+          date: p.date
+        }))
+
+        const numEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣']
+        let summaryText = `📋 <b>电报频道 ${targetChat} 最近 ${posts.length} 条贴文：</b>\n\n`
+        posts.forEach((p, idx) => {
+          const preview = p.text.length > 50 ? `${p.text.slice(0, 50)}...` : (p.text || (p.hasMedia ? '[多媒体内容]' : '(空)'))
+          summaryText += `${numEmojis[idx]} <b>#${p.id}</b> (${new Date(p.date).toLocaleTimeString()})\n<blockquote>${this.escapeHtml(preview)}</blockquote>\n`
+        })
+        summaryText += `\n<i>请在下方直接点击【1~${posts.length}】选项卡选择要撤回的贴文：</i>`
+
+        const selectButtons = posts.map((_, idx) => ({
+          text: `${numEmojis[idx]} 删第${idx + 1}条`,
+          callback_data: `sel_del_tg_${idx}`
+        }))
+
+        const keyboardRows: any[][] = []
+        if (selectButtons.length <= 3) {
+          keyboardRows.push(selectButtons)
+        } else {
+          keyboardRows.push(selectButtons.slice(0, 3))
+          keyboardRows.push(selectButtons.slice(3))
         }
+        keyboardRows.push([{ text: '🔙 取消', callback_data: 'action_cancel' }])
+
+        await this.sendMessage(baseUrl, fromId, summaryText, {
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard: keyboardRows }
+        })
         return
       }
 
-      // Get Twitter 5 recent tweets and allow deletion
+      // Get Twitter 5 recent tweets in a single consolidated preview with 1~5 selection tabs
       if (data === 'del_hist_tw') {
         const activeTwAcc = appStore.getAccounts().find((a) => a.platform === 'twitter' && a.status === 'active')
         if (!activeTwAcc) {
@@ -259,59 +293,98 @@ export class TelegramBotInteractiveService {
 
         const tweets = await twitterDriver.fetchRecentTweetsForDeletion(activeTwAcc, 5)
         if (tweets.length === 0) {
-          await this.sendMessage(baseUrl, fromId, `⚠️ 暂未获取到 @${activeTwAcc.username} 的最近推文记录。`)
+          await this.sendMessage(baseUrl, fromId, `⚠️ 暂未获取到 @${activeTwAcc.username} 的推文记录。`)
           return
         }
 
-        await this.sendMessage(baseUrl, fromId, `📋 <b>Twitter @${activeTwAcc.username} 最近 5 条推文：</b>\n点击下方按钮可直接在 X 上删除：`, { parse_mode: 'HTML' })
-        for (const tw of tweets) {
-          const preview = tw.text.length > 60 ? `${tw.text.slice(0, 60)}...` : tw.text
-          await this.sendMessage(
-            baseUrl,
-            fromId,
-            `📌 <b>推文 #${tw.id}</b> (${new Date(tw.createdAt).toLocaleTimeString()})\n<blockquote>${this.escapeHtml(preview)}</blockquote>`,
-            {
-              parse_mode: 'HTML',
-              reply_markup: {
-                inline_keyboard: [
-                  [
-                    { text: `🗑️ 删除此推文 (#${tw.id})`, callback_data: `do_del_tw_${tw.id}` }
-                  ]
-                ]
-              }
-            }
-          )
+        session.recentTwCache = tweets.map((tw) => ({
+          id: String(tw.id).trim(),
+          text: tw.text,
+          createdAt: tw.createdAt
+        }))
+
+        const numEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣']
+        let summaryText = `📋 <b>Twitter @${activeTwAcc.username} 最近 ${tweets.length} 条推文：</b>\n\n`
+        tweets.forEach((tw, idx) => {
+          const preview = tw.text.length > 50 ? `${tw.text.slice(0, 50)}...` : (tw.text || '(空)')
+          summaryText += `${numEmojis[idx]} <b>#${tw.id}</b> (${new Date(tw.createdAt).toLocaleTimeString()})\n<blockquote>${this.escapeHtml(preview)}</blockquote>\n`
+        })
+        summaryText += `\n<i>请在下方直接点击【1~${tweets.length}】选项卡选择要删除的推文：</i>`
+
+        const selectButtons = tweets.map((_, idx) => ({
+          text: `${numEmojis[idx]} 删第${idx + 1}条`,
+          callback_data: `sel_del_tw_${idx}`
+        }))
+
+        const keyboardRows: any[][] = []
+        if (selectButtons.length <= 3) {
+          keyboardRows.push(selectButtons)
+        } else {
+          keyboardRows.push(selectButtons.slice(0, 3))
+          keyboardRows.push(selectButtons.slice(3))
         }
+        keyboardRows.push([{ text: '🔙 取消', callback_data: 'action_cancel' }])
+
+        await this.sendMessage(baseUrl, fromId, summaryText, {
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard: keyboardRows }
+        })
         return
       }
 
-      // Execute TG Message Revoke
-      if (data.startsWith('do_del_tg_')) {
-        const msgId = parseInt(data.replace('do_del_tg_', ''), 10)
+      // Execute TG Message Revoke from 1~5 selection
+      if (data.startsWith('sel_del_tg_')) {
+        const idx = parseInt(data.replace('sel_del_tg_', ''), 10)
+        const targetPost = session.recentTgCache?.[idx]
+        if (!targetPost || !targetPost.id) {
+          await this.sendMessage(baseUrl, fromId, '⚠️ 未找到选中的贴文，请重新点击 /delete 检索。')
+          return
+        }
+
         const settings = appStore.getSettings()
         const targetChat = settings.defaultBotChatId || ''
-        const res = await telegramBotDriver.deletePost({ chatId: targetChat, messageId: msgId, botToken: token })
+        const res = await telegramBotDriver.deletePost({
+          chatId: targetChat,
+          messageId: targetPost.id,
+          botToken: token
+        })
+
         if (res.success) {
-          await this.sendMessage(baseUrl, fromId, `✅ 已成功从电报频道撤回删除消息 #${msgId}！`)
+          await this.sendMessage(baseUrl, fromId, `✅ <b>已成功撤回第 ${idx + 1} 条电报消息</b> (#${targetPost.id})！`, { parse_mode: 'HTML' })
+          session.recentTgCache.splice(idx, 1)
         } else {
-          await this.sendMessage(baseUrl, fromId, `❌ 撤回消息 #${msgId} 失败：${res.error}`)
+          await this.sendMessage(baseUrl, fromId, `❌ 撤回第 ${idx + 1} 条消息 (#${targetPost.id}) 失败：${res.error}`)
         }
         return
       }
 
-      // Execute Twitter Tweet Revoke
-      if (data.startsWith('do_del_tw_')) {
-        const tweetId = data.replace('do_del_tw_', '')
+      // Execute Twitter Tweet Revoke from 1~5 selection
+      if (data.startsWith('sel_del_tw_')) {
+        const idx = parseInt(data.replace('sel_del_tw_', ''), 10)
+        const targetTweet = session.recentTwCache?.[idx]
+        if (!targetTweet || !targetTweet.id) {
+          await this.sendMessage(baseUrl, fromId, '⚠️ 未找到选中的推文，请重新点击 /delete 检索。')
+          return
+        }
+
+        const cleanId = String(targetTweet.id).trim()
+        if (!cleanId || cleanId === 'undefined' || !/^\d+$/.test(cleanId)) {
+          await this.sendMessage(baseUrl, fromId, `❌ 无法删除：推文 ID 无效 ("${cleanId}")。`)
+          return
+        }
+
         const activeTwAcc = appStore.getAccounts().find((a) => a.platform === 'twitter' && a.status === 'active')
         if (!activeTwAcc) {
           await this.sendMessage(baseUrl, fromId, '⚠️ 未找到活跃的 Twitter 账号。')
           return
         }
-        const res = await twitterDriver.deleteTweet(activeTwAcc, tweetId)
+
+        const res = await twitterDriver.deleteTweet(activeTwAcc, cleanId)
         if (res.success) {
-          await this.sendMessage(baseUrl, fromId, `✅ 已成功从 X (Twitter) 删除推文 #${tweetId}！`)
+          await this.sendMessage(baseUrl, fromId, `✅ <b>已成功从 X (Twitter) 删除第 ${idx + 1} 条推文</b> (#${cleanId})！`, { parse_mode: 'HTML' })
+          session.recentTwCache.splice(idx, 1)
         } else {
-          await this.sendMessage(baseUrl, fromId, `❌ 删除推文 #${tweetId} 失败：${res.error}`)
+          await this.sendMessage(baseUrl, fromId, `❌ 删除第 ${idx + 1} 条推文 (#${cleanId}) 失败：${res.error}`)
         }
         return
       }
@@ -328,15 +401,23 @@ export class TelegramBotInteractiveService {
 
       if (!fromId || !chatId) return
 
-      // --- Security & Pairing Code Verification ---
+      // --- Security Check: Blocked User Verification ---
+      if (appStore.isBotUserBlocked(fromId)) {
+        const blockMsg = `🚫 <b>安全访问已被封锁 (Access Blocked)</b>\n\n你的 Telegram 账号由于连续 5 次输入错误匹配码已被系统永久封禁。\n\n如需解封，请在电脑端 Rosetta 桌面应用 ➔「电报机器人」中解封。`
+        await this.sendMessage(baseUrl, fromId, blockMsg, { parse_mode: 'HTML' })
+        return
+      }
+
+      // --- Security Check: Pairing Code Verification ---
       const isAuthorized = appStore.isBotUserAuthorized(fromId)
       if (!isAuthorized) {
         const pairingCode = appStore.getBotPairingCode().trim()
         if (text && text.toLowerCase() === pairingCode.toLowerCase()) {
+          appStore.clearBotPairingAttempts(fromId)
           appStore.addBotAuthorizedUserId(fromId)
           console.log(`[TelegramBotInteractive] User #${fromId} successfully paired with matching code!`)
 
-          const successMsg = `🎉 <b>配对成功！身份已通过安全校验并永久授权。</b>\n\n你的 Telegram User ID: <code>${fromId}</code>\n本端已记住你的身份，后续发帖无需重复校验密码。\n\n请在下方点击选择本次发布的<b>目标平台</b>：`
+          const successMsg = `🎉 <b>配对成功！身份已通过安全校验并永久授权。</b>\n\n你的 Telegram User ID: <code>${fromId}</code>\n本端已记住你的身份，后续发帖无需重复校验密码。\n\n请在下方点击选择操作：`
 
           await this.sendMessage(baseUrl, fromId, successMsg, {
             parse_mode: 'HTML',
@@ -350,7 +431,7 @@ export class TelegramBotInteractiveService {
                   { text: '⚡ 两端同时广播 (X + TG)', callback_data: 'mode_both' }
                 ],
                 [
-                  { text: '🗑️ 撤回/删除历史贴文 (每次5条)', callback_data: 'menu_delete' }
+                  { text: '🗑️ 撤回/删除历史贴文 (1~5选项卡)', callback_data: 'menu_delete' }
                 ]
               ]
             }
@@ -358,8 +439,17 @@ export class TelegramBotInteractiveService {
           return
         }
 
+        // Record failed attempt
+        const fails = appStore.recordBotPairingFailure(fromId)
+        if (fails >= 5) {
+          const lockedMsg = `🚫 <b>错误次数达到上限，账号已封锁！</b>\n由于连续 5 次匹配码错误，你的 Telegram ID (<code>${fromId}</code>) 已被系统永久封锁。\n\n如需解封，请在电脑端 Rosetta 桌面应用中解除封锁。`
+          await this.sendMessage(baseUrl, fromId, lockedMsg, { parse_mode: 'HTML' })
+          return
+        }
+
+        const remaining = 5 - fails
         // Prompt for pairing code
-        const lockMsg = `🔒 <b>Rosetta 主控端安全校验</b>\n\n该机器人已开启身份保护，防止未授权人员使用。\n\n首次使用请输入 Rosetta 桌面端生成的 <b>6位匹配授权码</b>：\n<i>（打开电脑端 Rosetta ➔「电报机器人」即可看到匹配码）</i>`
+        const lockMsg = `🔒 <b>Rosetta 主控端安全校验</b>\n\n该机器人已开启身份保护，防止未授权人员使用。\n\n首次使用请输入 Rosetta 桌面端生成的 <b>6位匹配授权码</b>：\n<i>（打开电脑端 Rosetta ➔「电报机器人」即可查看匹配码）</i>\n\n⚠️ 剩余尝试机会：<b>${remaining} / 5</b> 次，连续 5 次错误将自动封禁。`
         await this.sendMessage(baseUrl, fromId, lockMsg, { parse_mode: 'HTML' })
         return
       }

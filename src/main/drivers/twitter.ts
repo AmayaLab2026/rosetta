@@ -854,6 +854,11 @@ export class TwitterDriver {
    * Delete a tweet by ID using GraphQL mutation
    */
   async deleteTweet(account: Account, tweetId: string): Promise<{ success: boolean; error?: string }> {
+    const cleanId = String(tweetId || '').trim()
+    if (!cleanId || cleanId === 'undefined' || !/^\d+$/.test(cleanId)) {
+      return { success: false, error: `无效的推文 ID: "${tweetId}"` }
+    }
+
     const { authToken, ct0 } = account.credentials
     if (!authToken || !ct0) {
       return { success: false, error: 'Missing auth_token or ct0 credentials' }
@@ -865,7 +870,7 @@ export class TwitterDriver {
 
       const payload = {
         variables: {
-          tweet_id: tweetId,
+          tweet_id: cleanId,
           dark_request: false
         },
         queryId: DELETE_QUERY_ID
@@ -942,6 +947,27 @@ export class TwitterDriver {
     const { authToken, ct0 } = account.credentials
     if (!authToken || !ct0) return []
 
+    // 1. Try GraphQL UserOriginalsTimeline
+    try {
+      const graphQLTweets = await this.fetchRecentTweets(account, limit)
+      if (Array.isArray(graphQLTweets) && graphQLTweets.length > 0) {
+        const valid = graphQLTweets
+          .filter((t) => t.tweetId && /^\d+$/.test(String(t.tweetId).trim()))
+          .map((t) => ({
+            id: String(t.tweetId).trim(),
+            createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : new Date().toISOString(),
+            text: t.text || `推文 #${t.tweetId}`,
+            url: `https://x.com/${account.username}/status/${t.tweetId}`
+          }))
+        if (valid.length > 0) {
+          return valid.slice(0, limit)
+        }
+      }
+    } catch (e: any) {
+      console.warn('[TwitterDriver] GraphQL fetchRecentTweets error:', e.message)
+    }
+
+    // 2. Try REST 1.1 user_timeline
     try {
       const res = await fetch(
         `https://api.twitter.com/1.1/statuses/user_timeline.json?count=${limit}&tweet_mode=extended&screen_name=${account.username}`,
@@ -961,23 +987,32 @@ export class TwitterDriver {
       if (res.ok) {
         const data = (await res.json()) as any[]
         if (Array.isArray(data) && data.length > 0) {
-          return data.map((t) => ({
-            id: t.id_str || String(t.id),
-            createdAt: new Date(t.created_at).toISOString(),
-            text: t.full_text || t.text || '',
-            url: `https://x.com/${account.username}/status/${t.id_str || t.id}`
-          }))
+          const valid = data
+            .filter((t) => (t.id_str || t.id) && /^\d+$/.test(String(t.id_str || t.id)))
+            .map((t) => {
+              const tid = String(t.id_str || t.id)
+              return {
+                id: tid,
+                createdAt: new Date(t.created_at).toISOString(),
+                text: t.full_text || t.text || '',
+                url: `https://x.com/${account.username}/status/${tid}`
+              }
+            })
+          if (valid.length > 0) {
+            return valid.slice(0, limit)
+          }
         }
       }
     } catch (e: any) {
       console.warn('[TwitterDriver] fetchRecentTweets via API failed:', e.message)
     }
 
-    // Fallback: extract from locally tracked mirrored posts and composer logs
+    // 3. Fallback: extract from locally tracked mirrored posts and composer logs
     const mirrored = appStore
       .getMirroredPosts()
       .filter((m) => m.targetPlatform === 'twitter' && m.targetAccountId === account.id)
-    const recentTweetIds = Array.from(new Set(mirrored.flatMap((m) => m.targetTweetIds)))
+    const recentTweetIds = Array.from(new Set(mirrored.flatMap((m) => m.targetTweetIds || [])))
+      .filter((tid) => tid && typeof tid === 'string' && /^\d+$/.test(tid))
       .slice(-limit)
       .reverse()
 

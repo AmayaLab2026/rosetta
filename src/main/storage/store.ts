@@ -9,6 +9,8 @@ interface StoreData {
   logs: MirrorLogItem[]
   mirroredPosts: MirroredPostRecord[]
   botPosts?: TelegramBotPostItem[]
+  botBlockedUserIds?: number[]
+  botFailedAttempts?: Record<string, number>
   settings: AppSettings
 }
 
@@ -18,6 +20,8 @@ const DEFAULT_STORE: StoreData = {
   logs: [],
   mirroredPosts: [],
   botPosts: [],
+  botBlockedUserIds: [],
+  botFailedAttempts: {},
   settings: {
     autoStartEngineOnLaunch: true,
     minimizeToTray: true,
@@ -301,6 +305,50 @@ export class AppStore {
     const initLen = this.data.settings.botAuthorizedUserIds.length
     this.data.settings.botAuthorizedUserIds = this.data.settings.botAuthorizedUserIds.filter((id) => id !== userId)
     if (this.data.settings.botAuthorizedUserIds.length < initLen) {
+      this.persist(true)
+      return true
+    }
+    return false
+  }
+
+  public isBotUserBlocked(userId: number): boolean {
+    const blocked = this.data.botBlockedUserIds || []
+    return blocked.includes(userId)
+  }
+
+  public getBotBlockedUserIds(): number[] {
+    return this.data.botBlockedUserIds || []
+  }
+
+  public recordBotPairingFailure(userId: number): number {
+    if (!this.data.botFailedAttempts) this.data.botFailedAttempts = {}
+    const key = String(userId)
+    const current = (this.data.botFailedAttempts[key] || 0) + 1
+    this.data.botFailedAttempts[key] = current
+
+    if (current >= 5) {
+      if (!this.data.botBlockedUserIds) this.data.botBlockedUserIds = []
+      if (!this.data.botBlockedUserIds.includes(userId)) {
+        this.data.botBlockedUserIds.push(userId)
+      }
+    }
+    this.persist(true)
+    return current
+  }
+
+  public clearBotPairingAttempts(userId: number): void {
+    if (this.data.botFailedAttempts) {
+      delete this.data.botFailedAttempts[String(userId)]
+      this.persist(true)
+    }
+  }
+
+  public unblockBotUser(userId: number): boolean {
+    if (!this.data.botBlockedUserIds) return false
+    this.clearBotPairingAttempts(userId)
+    const initLen = this.data.botBlockedUserIds.length
+    this.data.botBlockedUserIds = this.data.botBlockedUserIds.filter((id) => id !== userId)
+    if (this.data.botBlockedUserIds.length < initLen) {
       this.persist(true)
       return true
     }

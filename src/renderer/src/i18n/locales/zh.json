@@ -143,7 +143,11 @@
     "authorizedUsersTitle": "已授权 Telegram 用户 ID 白名单",
     "noAuthorizedUsers": "暂无已绑定的 Telegram 用户。请在私聊中向机器人发送 6 位匹配码完成初次校验。",
     "revokeUser": "解绑",
-    "userRevoked": "已解绑该用户"
+    "userRevoked": "已解绑该用户",
+    "blockedUsersTitle": "连续 5 次错误自动封禁黑名单",
+    "noBlockedUsers": "暂无被封禁的用户 (安全正常)",
+    "unblockUser": "解封",
+    "strikePolicyNotice": "安全风控：输入配对码连续错误 5 次将被系统自动永久封禁，必须在此由管理员手动解封。"
   },
   "terminal": {
     "title": "系统运行控制台日志",

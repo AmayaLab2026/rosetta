@@ -222,9 +222,10 @@ export interface RosettaAPI {
   verifyTelegramBotToken: (token: string) => Promise<{ valid: boolean; botName?: string; username?: string; error?: string }>
   getTelegramBotInteractiveStatus: () => Promise<{ polling: boolean; botUsername: string | null; botFirstName: string | null }>
   toggleTelegramBotInteractive: (start: boolean) => Promise<boolean>
-  getBotPairingInfo: () => Promise<{ pairingCode: string; authorizedUserIds: number[] }>
+  getBotPairingInfo: () => Promise<{ pairingCode: string; authorizedUserIds: number[]; blockedUserIds: number[] }>
   resetBotPairingCode: () => Promise<string>
   revokeBotAuthorizedUser: (userId: number) => Promise<boolean>
+  unblockBotUser: (userId: number) => Promise<boolean>
 
   // Dedicated Channel / Twitter Post Deletion Studio
   getTelegramRecentPosts: (params?: { channelId?: string; limit?: number }) => Promise<TelegramChannelPost[]>

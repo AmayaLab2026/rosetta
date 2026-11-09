@@ -52,6 +52,7 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
   // Pairing Code Security
   const [pairingCode, setPairingCode] = useState('')
   const [authorizedUsers, setAuthorizedUsers] = useState<number[]>([])
+  const [blockedUsers, setBlockedUsers] = useState<number[]>([])
   const [copiedCode, setCopiedCode] = useState(false)
 
   // Tutorial Collapse state
@@ -63,9 +64,19 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
       if (info) {
         setPairingCode(info.pairingCode)
         setAuthorizedUsers(info.authorizedUserIds || [])
+        setBlockedUsers(info.blockedUserIds || [])
       }
     } catch (e) {
       console.warn('Failed to load pairing info:', e)
+    }
+  }
+
+  const handleUnblockUser = async (userId: number) => {
+    try {
+      await window.rosetta.unblockBotUser?.(userId)
+      setBlockedUsers((prev) => prev.filter((id) => id !== userId))
+    } catch (e) {
+      console.warn('Failed to unblock user:', e)
     }
   }
 
@@ -359,6 +370,38 @@ export const TelegramBotStudio: React.FC<TelegramBotStudioProps> = () => {
               </div>
             )}
           </div>
+        </div>
+
+        {/* 5-Strike Auto-Blocked Blacklist */}
+        {blockedUsers.length > 0 && (
+          <div className="pt-3 border-t border-rose-200/60 font-mono text-xs space-y-2">
+            <div className="flex items-center gap-2 text-rose-800 font-semibold text-[11px]">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+              <span>{t.bot.blockedUsersTitle} ({blockedUsers.length})</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {blockedUsers.map((uid) => (
+                <span
+                  key={uid}
+                  className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-rose-50 border border-rose-200 text-rose-900 text-xs font-mono shadow-2xs"
+                >
+                  <span>封禁 ID: {uid}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleUnblockUser(uid)}
+                    className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold transition-colors"
+                    title={t.bot.unblockUser}
+                  >
+                    {t.bot.unblockUser}
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="text-[11px] font-mono text-gray-500 pt-1">
+          {t.bot.strikePolicyNotice}
         </div>
       </div>
 
