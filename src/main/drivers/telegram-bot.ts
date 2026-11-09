@@ -4,12 +4,13 @@ import { TelegramBotPostItem, TelegramBotSendPayload } from '../../shared/types'
 
 export class TelegramBotDriver {
   /**
-   * Verify Telegram Bot Token and retrieve Bot identity via getMe
+   * Verify Telegram Bot Token and retrieve real Bot identity & avatar via getMe and public CDN
    */
   async verifyBotToken(token: string): Promise<{
     valid: boolean
     botName?: string
     username?: string
+    avatarUrl?: string
     error?: string
   }> {
     if (!token || !token.trim()) {
@@ -19,10 +20,32 @@ export class TelegramBotDriver {
       const res = await fetch(`https://api.telegram.org/bot${token.trim()}/getMe`)
       const data = (await res.json()) as any
       if (data.ok && data.result) {
+        const botName = data.result.first_name || 'Rosetta Bot'
+        const username = data.result.username || ''
+
+        let avatarUrl: string | undefined = undefined
+        if (username) {
+          try {
+            const avatarRes = await fetch(`https://t.me/i/userpic/320/${username}.jpg`, {
+              signal: AbortSignal.timeout(5000)
+            })
+            if (avatarRes.ok) {
+              const buf = Buffer.from(await avatarRes.arrayBuffer())
+              if (buf.length > 0) {
+                avatarUrl = `data:image/jpeg;base64,${buf.toString('base64')}`
+              }
+            }
+          } catch (e: any) {
+            console.warn('[TelegramBotDriver] Could not download avatar data URL, using direct URL:', e.message)
+            avatarUrl = `https://t.me/i/userpic/320/${username}.jpg`
+          }
+        }
+
         return {
           valid: true,
-          botName: data.result.first_name,
-          username: data.result.username
+          botName,
+          username,
+          avatarUrl
         }
       }
       return { valid: false, error: data.description || 'Invalid Bot Token' }

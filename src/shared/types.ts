@@ -199,7 +199,7 @@ export interface RosettaAPI {
   deleteTelegramBotPost: (params: { chatId: string; messageId: number; botToken?: string; useMtproto?: boolean }) => Promise<{ success: boolean; error?: string }>
   getTelegramBotPosts: () => Promise<TelegramBotPostItem[]>
   clearTelegramBotPosts: () => Promise<boolean>
-  verifyTelegramBotToken: (token: string) => Promise<{ valid: boolean; botName?: string; username?: string; error?: string }>
+  verifyTelegramBotToken: (token: string) => Promise<{ valid: boolean; botName?: string; username?: string; avatarUrl?: string; error?: string }>
   getTelegramBotInteractiveStatus: () => Promise<{ polling: boolean; botUsername: string | null; botFirstName: string | null }>
   toggleTelegramBotInteractive: (start: boolean) => Promise<boolean>
   getBotPairingInfo: () => Promise<{ pairingCode: string; authorizedUserIds: number[]; blockedUserIds: number[] }>

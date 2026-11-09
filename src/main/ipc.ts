@@ -67,6 +67,7 @@ export function registerIpcHandlers(): void {
             acc.status = 'active'
             if (res.botName) acc.displayName = res.botName
             if (res.username) acc.username = `@${res.username}`
+            if (res.avatarUrl) acc.avatarUrl = res.avatarUrl
             acc.lastChecked = new Date().toISOString()
             appStore.saveAccount(acc)
             return { status: 'active' }
@@ -103,6 +104,7 @@ export function registerIpcHandlers(): void {
         if (res.valid) {
           if (res.botName) acc.displayName = res.botName
           if (res.username) acc.username = `@${res.username}`
+          if (res.avatarUrl) acc.avatarUrl = res.avatarUrl
           acc.status = 'active'
           acc.lastChecked = new Date().toISOString()
           appStore.saveAccount(acc)

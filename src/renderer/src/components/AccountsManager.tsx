@@ -37,16 +37,20 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
     }).catch(() => {})
   }, [])
 
-  // Auto-fetch avatar if missing for active accounts
+  // Auto-fetch avatar & real profile on mount
   useEffect(() => {
     accounts.forEach((acc) => {
-      if (acc.status === 'active' && !acc.avatarUrl) {
+      if (acc.platform === 'telegram') {
+        window.rosetta.refreshAccountProfile?.(acc.id).then(() => {
+          onAccountUpdated()
+        }).catch(() => {})
+      } else if (acc.status === 'active' && !acc.avatarUrl) {
         window.rosetta.refreshAccountProfile?.(acc.id).then(() => {
           onAccountUpdated()
         }).catch(() => {})
       }
     })
-  }, [accounts])
+  }, [])
 
   const twitterAccount = accounts.find((a) => a.platform === 'twitter')
   const telegramBotAccount = accounts.find((a) => a.platform === 'telegram')
@@ -130,12 +134,14 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
         defaultBotChatId: tgChatId.trim() || undefined
       })
 
-      // 3. Save as platform account
+      // 3. Save as platform account with real bot avatar
+      const existingTg = accounts.find((a) => a.platform === 'telegram')
       const botAccount: Account = {
-        id: `tg_bot_${Date.now()}`,
+        id: existingTg ? existingTg.id : `tg_bot_${Date.now()}`,
         platform: 'telegram',
-        username: res.username ? `@${res.username}` : 'telegram_bot',
+        username: res.username ? `@${res.username}` : '@telegram_bot',
         displayName: res.botName || 'Telegram Bot',
+        avatarUrl: res.avatarUrl,
         status: 'active',
         lastChecked: new Date().toISOString(),
         credentials: {

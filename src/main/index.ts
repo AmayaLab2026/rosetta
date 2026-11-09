@@ -8,6 +8,7 @@ import { appStore } from './storage/store'
 import { terminalLogger } from './storage/terminal-logger'
 import { prewarmTwitterTransaction } from './drivers/twitter-transaction'
 import { telegramBotInteractiveService } from './drivers/telegram-bot-interactive'
+import { telegramBotDriver } from './drivers/telegram-bot'
 export { twitterDriver } from './drivers/twitter'
 
 // Initialize real-time terminal logger to intercept all system console logs
@@ -215,6 +216,50 @@ app.whenReady().then(async () => {
     })
   } catch (e) {
     console.warn('[Rosetta] Error starting interactive bot:', e)
+  }
+
+  // Auto-sync real Telegram Bot identity & avatar from Telegram API
+  try {
+    const settings = appStore.getSettings()
+    if (settings.defaultBotToken) {
+      telegramBotDriver.verifyBotToken(settings.defaultBotToken).then((botInfo) => {
+        if (botInfo.valid) {
+          const accounts = appStore.getAccounts()
+          let botAcc = accounts.find((a) => a.platform === 'telegram')
+          if (!botAcc) {
+            botAcc = {
+              id: `tg_bot_${Date.now()}`,
+              platform: 'telegram',
+              username: botInfo.username ? `@${botInfo.username}` : '@bot',
+              displayName: botInfo.botName || 'Rosetta Bot',
+              avatarUrl: botInfo.avatarUrl,
+              status: 'active',
+              lastChecked: new Date().toISOString(),
+              credentials: {
+                botToken: settings.defaultBotToken,
+                isBot: true
+              }
+            }
+          } else {
+            botAcc.displayName = botInfo.botName || botAcc.displayName
+            botAcc.username = botInfo.username ? `@${botInfo.username}` : botAcc.username
+            if (botInfo.avatarUrl) botAcc.avatarUrl = botInfo.avatarUrl
+            botAcc.status = 'active'
+            botAcc.lastChecked = new Date().toISOString()
+            botAcc.credentials.botToken = settings.defaultBotToken
+            botAcc.credentials.isBot = true
+          }
+          appStore.saveAccount(botAcc)
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed() && win.webContents) {
+              win.webContents.send('accounts:updated', botAcc)
+            }
+          })
+        }
+      }).catch((e) => console.warn('[Rosetta] Auto-sync Telegram bot profile failed:', e))
+    }
+  } catch (e) {
+    console.warn('[Rosetta] Error syncing bot profile:', e)
   }
 
   // Pre-warm Twitter client transaction ID in background for zero-latency post signing
