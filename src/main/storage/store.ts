@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { EventEmitter } from 'events'
 import { Account, MirrorRule, MirrorLogItem, AppSettings, TelegramBotPostItem } from '../../shared/types'
 
 interface StoreData {
@@ -28,11 +29,12 @@ const DEFAULT_STORE: StoreData = {
   }
 }
 
-export class AppStore {
+export class AppStore extends EventEmitter {
   private filePath: string
   private data: StoreData
 
   constructor() {
+    super()
     let userDataDir: string
     try {
       userDataDir = app.getPath('userData')
@@ -323,6 +325,7 @@ export class AppStore {
   public updateSettings(settings: Partial<StoreData['settings']>) {
     this.data.settings = { ...this.data.settings, ...settings }
     this.persist(true)
+    this.emit('settings-changed', this.data.settings)
   }
 
   // --- Security & Credential Destruction ---

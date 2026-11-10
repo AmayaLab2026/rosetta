@@ -18,6 +18,85 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 
+function buildContextMenu(): Menu {
+  const isEngineRunning = telegramMirrorService.getStatus().running
+  const settings = appStore.getSettings()
+
+  return Menu.buildFromTemplate([
+    {
+      label: '打开主窗口 (Show Window)',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.focus()
+        }
+      }
+    },
+    {
+      label: `监听状态: ${isEngineRunning ? '● 正在运行 (Running)' : '○ 已停止 (Stopped)'}`,
+      click: async () => {
+        try {
+          if (isEngineRunning) {
+            await telegramMirrorService.stop()
+          } else {
+            const started = await telegramMirrorService.start()
+            if (!started && mainWindow) {
+              mainWindow.show()
+              mainWindow.focus()
+            }
+          }
+        } catch (e) {
+          console.error('[Tray] Failed to toggle mirror service:', e)
+        }
+        updateTrayMenu()
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '开机自动启动 (Launch on Boot)',
+      type: 'checkbox',
+      checked: !!settings.openAtLogin,
+      click: (item) => {
+        const checked = item.checked
+        try {
+          app.setLoginItemSettings({
+            openAtLogin: checked,
+            openAsHidden: !!settings.startMinimized,
+            path: process.execPath,
+            args: settings.startMinimized ? ['--hidden'] : []
+          })
+        } catch (e) {
+          console.warn('[Tray] Failed to set login item settings:', e)
+        }
+        appStore.updateSettings({ openAtLogin: checked })
+      }
+    },
+    {
+      label: '关闭时最小化到托盘 (Close to Tray)',
+      type: 'checkbox',
+      checked: settings.minimizeToTray !== false,
+      click: (item) => {
+        appStore.updateSettings({ minimizeToTray: item.checked })
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '退出 Rosetta (Quit)',
+      click: () => {
+        isQuitting = true
+        app.quit()
+      }
+    }
+  ])
+}
+
+function updateTrayMenu(): void {
+  if (!tray) return
+  const isEngineRunning = telegramMirrorService.getStatus().running
+  tray.setToolTip(`Rosetta — 社交同步与电报镜像中枢 (${isEngineRunning ? '监听中' : '已停止'})`)
+  tray.setContextMenu(buildContextMenu())
+}
+
 function createTray(): void {
   if (tray) return
   const iconPath = join(__dirname, '../../resources/icon.png')
@@ -25,74 +104,24 @@ function createTray(): void {
 
   const image = nativeImage.createFromPath(iconPath)
   tray = new Tray(image.resize({ width: 16, height: 16 }))
-  tray.setToolTip('Rosetta — 社交同步与电报镜像中枢')
+  updateTrayMenu()
 
-  const buildContextMenu = () => {
-    const isEngineRunning = telegramMirrorService.getStatus().running
-    const settings = appStore.getSettings()
-
-    return Menu.buildFromTemplate([
-      {
-        label: '打开主窗口 (Show Window)',
-        click: () => {
-          if (mainWindow) {
-            mainWindow.show()
-            mainWindow.focus()
-          }
-        }
-      },
-      {
-        label: `监听状态: ${isEngineRunning ? '● 正在运行 (Running)' : '○ 已停止 (Stopped)'}`,
-        enabled: false
-      },
-      { type: 'separator' },
-      {
-        label: '开机自动启动 (Launch on Boot)',
-        type: 'checkbox',
-        checked: !!settings.openAtLogin,
-        click: (item) => {
-          const checked = item.checked
-          try {
-            app.setLoginItemSettings({
-              openAtLogin: checked,
-              openAsHidden: !!settings.startMinimized,
-              path: process.execPath,
-              args: settings.startMinimized ? ['--hidden'] : []
-            })
-          } catch (e) {
-            console.warn('[Tray] Failed to set login item settings:', e)
-          }
-          appStore.updateSettings({ openAtLogin: checked })
-        }
-      },
-      {
-        label: '关闭时最小化到托盘 (Close to Tray)',
-        type: 'checkbox',
-        checked: settings.minimizeToTray !== false,
-        click: (item) => {
-          appStore.updateSettings({ minimizeToTray: item.checked })
-        }
-      },
-      { type: 'separator' },
-      {
-        label: '退出 Rosetta (Quit)',
-        click: () => {
-          isQuitting = true
-          app.quit()
-        }
-      }
-    ])
-  }
-
-  tray.setContextMenu(buildContextMenu())
+  // Real-time updates for tray menu and tooltip
+  telegramMirrorService.on('status-changed', () => {
+    updateTrayMenu()
+  })
+  appStore.on('settings-changed', () => {
+    updateTrayMenu()
+  })
 
   // Refresh context menu on right click to reflect real-time engine state
   tray.on('right-click', () => {
-    tray?.setContextMenu(buildContextMenu())
+    updateTrayMenu()
   })
 
   // Click to toggle or show window
   tray.on('click', () => {
+    updateTrayMenu()
     if (!mainWindow) return
     if (mainWindow.isVisible()) {
       if (mainWindow.isFocused()) {

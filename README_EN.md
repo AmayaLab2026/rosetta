@@ -92,8 +92,8 @@ pnpm dev
 
 | Artifact | Architecture | Type | Notes |
 | :--- | :--- | :--- | :--- |
-| `Rosetta-Setup-0.2.10-x64.exe` | Windows x64 | NSIS Installer | Configurable installation directory with desktop shortcut |
-| `Rosetta-Portable-0.2.10-x64.exe` | Windows x64 | Portable | Single executable; runs without installation |
+| `Rosetta-Setup-0.2.11-x64.exe` | Windows x64 | NSIS Installer | Configurable installation directory with desktop shortcut |
+| `Rosetta-Portable-0.2.11-x64.exe` | Windows x64 | Portable | Single executable; runs without installation |
 
 ### Windows Notes
 - **SmartScreen warning**: Open-source builds do not include paid EV code signing certificates. If prompted by Windows Defender SmartScreen, choose "More info" → "Run anyway".

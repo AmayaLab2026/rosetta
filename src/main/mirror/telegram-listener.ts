@@ -3,6 +3,7 @@ import { StringSession } from 'telegram/sessions'
 import { NewMessage } from 'telegram/events'
 import { CustomFile } from 'telegram/client/uploads'
 import { BrowserWindow } from 'electron'
+import { EventEmitter } from 'events'
 import { appStore } from '../storage/store'
 import { twitterDriver } from '../drivers/twitter'
 import { ContentPipeline } from './pipeline'
@@ -14,10 +15,14 @@ export interface MediaItem {
   isVideo?: boolean
 }
 
-export class TelegramMirrorService {
+export class TelegramMirrorService extends EventEmitter {
   private client: TelegramClient | null = null
   private isRunning: boolean = false
   private authClient: TelegramClient | null = null
+
+  constructor() {
+    super()
+  }
   private selfSentCache = new Map<string, number>()
   private albumBuffers = new Map<
     string,
@@ -689,6 +694,7 @@ export class TelegramMirrorService {
 
   public notifyStatusChange(): void {
     const status = this.getStatus()
+    this.emit('status-changed', status)
     BrowserWindow.getAllWindows().forEach((win) => {
       try {
         if (!win.isDestroyed() && win.webContents) {
