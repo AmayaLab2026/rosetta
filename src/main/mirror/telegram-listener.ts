@@ -424,9 +424,35 @@ export class TelegramMirrorService extends EventEmitter {
     for (const rule of rules) {
       const startTime = Date.now()
       const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
-      const targetAccount = appStore.getAccount(rule.targetAccount.accountId)
+      let targetAccount = appStore.getAccount(rule.targetAccount.accountId)
 
       if (!targetAccount) {
+        // Fallback: match by platform and username/accountName, or any active account on that platform
+        const allAccounts = appStore.getAccounts()
+        targetAccount =
+          allAccounts.find(
+            (a) =>
+              a.platform === rule.targetAccount.platform &&
+              rule.targetAccount.accountName &&
+              a.username.toLowerCase() === rule.targetAccount.accountName.toLowerCase()
+          ) ||
+          allAccounts.find(
+            (a) => a.platform === rule.targetAccount.platform && a.status === 'active'
+          )
+
+        if (targetAccount) {
+          // Auto-heal the rule with the new valid account ID
+          console.log(
+            `[Mirror] Auto-healed target account for rule "${rule.name}": updated orphan ID ${rule.targetAccount.accountId} -> ${targetAccount.id} (@${targetAccount.username})`
+          )
+          rule.targetAccount.accountId = targetAccount.id
+          rule.targetAccount.accountName = targetAccount.username
+          appStore.saveRule(rule)
+        }
+      }
+
+      if (!targetAccount) {
+        console.warn(`[Mirror] Rule "${rule.name}" failed: target account not found for platform ${rule.targetAccount.platform}`)
         this.emitLog({
           id: logId,
           timestamp: new Date().toISOString(),

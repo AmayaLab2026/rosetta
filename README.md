@@ -102,8 +102,8 @@ pnpm dev
 
 | 产物文件名 | 目标架构 | 格式类型 | 附带说明 |
 | :--- | :--- | :--- | :--- |
-| `Rosetta-Setup-0.2.11-x64.exe` | Windows x64 | NSIS 安装向导 | 支持自定义安装路径，自动创建桌面及开始菜单快捷方式 |
-| `Rosetta-Portable-0.2.11-x64.exe` | Windows x64 | 单文件便携版 | 免安装解压即用，配置伴随执行目录或系统 `%APPDATA%` |
+| `Rosetta-Setup-0.2.12-x64.exe` | Windows x64 | NSIS 安装向导 | 支持自定义安装路径，自动创建桌面及开始菜单快捷方式 |
+| `Rosetta-Portable-0.2.12-x64.exe` | Windows x64 | 单文件便携版 | 免安装解压即用，配置伴随执行目录或系统 `%APPDATA%` |
 
 ### 避坑与运行说明
 - **SmartScreen 提示拦截**：开源构建尚未挂载昂贵的商业 EV 签名证书；初次启动如遇 Windows 蓝屏安全拦截弹窗，点击「更多信息」→「仍要运行」即可正常开启。

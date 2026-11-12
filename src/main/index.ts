@@ -9,7 +9,8 @@ import { terminalLogger } from './storage/terminal-logger'
 import { prewarmTwitterTransaction } from './drivers/twitter-transaction'
 import { telegramBotInteractiveService } from './drivers/telegram-bot-interactive'
 import { telegramBotDriver } from './drivers/telegram-bot'
-export { twitterDriver } from './drivers/twitter'
+import { twitterDriver } from './drivers/twitter'
+export { twitterDriver }
 
 // Initialize real-time terminal logger to intercept all system console logs
 terminalLogger.init()

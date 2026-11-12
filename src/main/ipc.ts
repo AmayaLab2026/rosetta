@@ -118,8 +118,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('twitter:interactive-login', async () => {
     const res = await twitterDriver.interactiveLogin()
     if (res.success && res.account) {
+      const existingAccounts = appStore.getAccounts()
+      const existing = existingAccounts.find(
+        (a) =>
+          a.platform === 'twitter' &&
+          (res.account?.username ? a.username.toLowerCase() === res.account.username.toLowerCase() : false)
+      )
+
       const fullAccount: Account = {
-        id: `tw_${Date.now()}`,
+        id: existing ? existing.id : `tw_${Date.now()}`,
         platform: 'twitter',
         username: res.account.username || '',
         displayName: res.account.displayName || res.account.username || 'X User',
@@ -129,6 +136,21 @@ export function registerIpcHandlers(): void {
         credentials: res.account.credentials || {}
       }
       appStore.saveAccount(fullAccount)
+
+      // Ensure any existing rules targeting this Twitter account stay linked
+      const rules = appStore.getRules()
+      for (const rule of rules) {
+        if (
+          rule.targetAccount.platform === 'twitter' &&
+          (rule.targetAccount.accountName?.toLowerCase() === fullAccount.username.toLowerCase() ||
+            (existing && rule.targetAccount.accountId === existing.id))
+        ) {
+          rule.targetAccount.accountId = fullAccount.id
+          rule.targetAccount.accountName = fullAccount.username
+          appStore.saveRule(rule)
+        }
+      }
+
       return { success: true, account: fullAccount }
     }
     return { success: false, error: res.error }
